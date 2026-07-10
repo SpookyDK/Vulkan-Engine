@@ -93,7 +93,27 @@ int create_instance() {
     return 0;
 }
 
+typedef struct {
+    int32_t graphicsFamily;
+} QueueFamiliyIndices;
+QueueFamiliyIndices find_queue_families(VkPhysicalDevice device) {
+    QueueFamiliyIndices indices;
+    indices.graphicsFamily = -1;
+
+    uint32_t queueFamiliyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, NULL);
+    VkQueueFamilyProperties queueFamilies[queueFamiliyCount];
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, queueFamilies);
+    for (int i = 0; i < queueFamiliyCount; i++) {
+        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            indices.graphicsFamily = i;
+        }
+    }
+    return indices;
+}
+
 uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
+    uint8_t score = 0;
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(device, &properties);
     VkPhysicalDeviceFeatures features;
@@ -106,22 +126,33 @@ uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
         break;
     case 1:
         printf("Ingegrated\n");
+        score = 100;
         break;
     case 2:
         printf("Discrete\n");
+        score = 200;
         break;
     case 3:
         printf("Virtual\n");
+        score = 100;
         break;
     case 4:
         printf("CPU\n");
+        score = 10;
         break;
     default:
         printf("unknown\n");
+        score = 0;
         break;
     }
+    if (!features.geometryShader)
+        score = 0;
 
-    return 0;
+    QueueFamiliyIndices indices = find_queue_families(device);
+    if (indices.graphicsFamily == -1) {
+        score = 0;
+    }
+    return score;
 }
 int pick_physical_vkdevice() {
     uint32_t deviceCount = 0;
@@ -129,15 +160,37 @@ int pick_physical_vkdevice() {
     printf("Found %d Vulkan Devices\n", deviceCount);
     VkPhysicalDevice devices[deviceCount];
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+    uint8_t highScore = 0;
+    int bestDevice = 0;
     for (int i = 0; i < deviceCount; i++) {
-        evalute_vulkan_device(devices[i]);
+        uint8_t score = evalute_vulkan_device(devices[i]);
+        if (highScore < score) {
+            highScore = score;
+            bestDevice = i;
+        }
     }
+    if (highScore == 0) {
+        return -1;
+    }
+    physicalDevice = devices[bestDevice];
+    return 0;
+}
 
+int create_logical_device() {
+
+    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
+    VkDeviceQueueCreateInfo queueCreateInfo = {};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
+    queueCreateInfo.queueCount = 1;
     return 0;
 }
 int init_vulkan() {
     create_instance();
-    pick_physical_vkdevice();
+    if (pick_physical_vkdevice() < 0) {
+        printf("pick_physical_vkdevice Found zero compatible devies\n");
+    }
+    create_logical_device();
 
     return 0;
 }
@@ -152,9 +205,9 @@ int main() {
     init_window();
     init_vulkan();
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-    }
+    // while (!glfwWindowShouldClose(window)) {
+    //     glfwPollEvents();
+    // }
     // do stuff
     //
     deinit_vulkan();
