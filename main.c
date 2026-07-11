@@ -25,6 +25,10 @@ const bool enableValidationLayers = true;
 //
 //
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+VkDevice device = VK_NULL_HANDLE;
+VkQueue graphicsQueue = VK_NULL_HANDLE;
+VkQueue presentationQueue = VK_NULL_HANDLE;
+VkSurfaceKHR surface;
 
 bool check_validation_layer_support() {
     uint32_t layerCount;
@@ -95,18 +99,25 @@ int create_instance() {
 
 typedef struct {
     int32_t graphicsFamily;
+    int32_t presentaionFamily;
 } QueueFamiliyIndices;
 QueueFamiliyIndices find_queue_families(VkPhysicalDevice device) {
     QueueFamiliyIndices indices;
+    indices.graphicsFamily = -1;
     indices.graphicsFamily = -1;
 
     uint32_t queueFamiliyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, NULL);
     VkQueueFamilyProperties queueFamilies[queueFamiliyCount];
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, queueFamilies);
+    VkBool32 presentSupport = false;
     for (int i = 0; i < queueFamiliyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphicsFamily = i;
+        }
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+        if (presentSupport) {
+            indices.presentaionFamily = i;
         }
     }
     return indices;
@@ -176,17 +187,45 @@ int pick_physical_vkdevice() {
     return 0;
 }
 
+// TODO Could be made more flexible, instead of hardcoded FAMILYCOUNT
+#define FAMILYCOUNT 2
 int create_logical_device() {
 
     QueueFamiliyIndices indices = find_queue_families(physicalDevice);
-    VkDeviceQueueCreateInfo queueCreateInfo = {};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
-    queueCreateInfo.queueCount = 1;
+    VkDeviceQueueCreateInfo queueCreateInfo[FAMILYCOUNT] = {};
+    uint32_t uniqueQueues[FAMILYCOUNT] = {indices.graphicsFamily, indices.presentaionFamily};
+
+    float queuePriority = 1.0f;
+    for (int i = 0; i < FAMILYCOUNT; i++) {
+        queueCreateInfo[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo[i].queueFamilyIndex = uniqueQueues[i];
+        queueCreateInfo[i].queueCount = 1;
+        queueCreateInfo[i].pQueuePriorities = &queuePriority;
+    }
+    VkPhysicalDeviceFeatures deviceFeatures = {0};
+    VkDeviceCreateInfo deviceCreateInfo = {};
+    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceCreateInfo.pQueueCreateInfos = queueCreateInfo;
+    deviceCreateInfo.queueCreateInfoCount = 2;
+    deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
+    if (vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device) != VK_SUCCESS) {
+        printf("vkCreateDeviceInfo Failed line %d", __LINE__);
+        return 1;
+    }
+    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.presentaionFamily, 0, &presentationQueue);
     return 0;
 }
+
+int create_surface() {
+    if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
+        printf("Failed to create window surface %d\n", __LINE__);
+    }
+}
+
 int init_vulkan() {
     create_instance();
+    create_surface();
     if (pick_physical_vkdevice() < 0) {
         printf("pick_physical_vkdevice Found zero compatible devies\n");
     }
@@ -196,6 +235,8 @@ int init_vulkan() {
 }
 
 int deinit_vulkan() {
+    vkDestroyDevice(device, NULL);
+    vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
 
     return 0;
