@@ -3,7 +3,6 @@
 //
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -135,10 +134,10 @@ bool check_device_extension_support(VkPhysicalDevice device) {
     bool extensionsFound = true;
 
     for (int i = 0; i < requiredExtensionCount; i++) {
-        extensionsFound = false;
+        extensionFound = false;
         for (int j = 0; i < extensionCount; i++) {
             if (strcmp(deviceExtensions[i], avaiableExtensions[j].extensionName)) {
-                extensionsFound = true;
+                extensionFound = true;
                 break;
             }
         }
@@ -146,35 +145,6 @@ bool check_device_extension_support(VkPhysicalDevice device) {
     return extensionsFound;
 }
 
-typedef struct {
-    VkSurfaceCapabilitiesKHR capabilities;
-    uint32_t formatCount;
-    VkSurfaceFormatKHR *formats;
-    uint32_t presentModeCount;
-    VkPresentModeKHR *presentModes;
-} SwapChainSupportDetails;
-
-SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device) {
-    SwapChainSupportDetails details;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details.formatCount, NULL);
-    if (details.formatCount != 0) {
-        details.formats = malloc(details.formatCount * sizeof(VkSurfaceFormatKHR));
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details.formatCount, details.formats);
-    }
-
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.presentModeCount, NULL);
-    if (details.presentModeCount != 0) {
-        details.presentModes = malloc(details.presentModeCount * sizeof(VkPresentModeKHR));
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.presentModeCount, details.presentModes);
-    }
-    return details;
-}
-void free_SwapChainSupportDetails(SwapChainSupportDetails details) {
-    free(details.presentModes);
-    free(details.formats);
-}
 uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
     uint8_t score = 0;
     VkPhysicalDeviceProperties properties;
@@ -214,16 +184,6 @@ uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
     QueueFamiliyIndices indices = find_queue_families(device);
     if (indices.graphicsFamily == -1) {
         score = 0;
-        return score;
-    }
-    if (!check_device_extension_support(device)) {
-        score = 0;
-        return score;
-    }
-    SwapChainSupportDetails swapChainSupprt = query_swap_chain_support(device);
-    if (swapChainSupprt.formatCount == 0 || swapChainSupprt.presentModeCount == 0) {
-        score = 0;
-        return score;
     }
 
     return score;
@@ -271,8 +231,6 @@ int create_logical_device() {
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfo;
     deviceCreateInfo.queueCreateInfoCount = 2;
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
-    deviceCreateInfo.enabledExtensionCount = requiredExtensionCount;
-    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
     if (vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device) != VK_SUCCESS) {
         printf("vkCreateDeviceInfo Failed line %d", __LINE__);
         return 1;
