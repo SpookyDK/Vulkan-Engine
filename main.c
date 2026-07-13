@@ -30,7 +30,11 @@ VkDevice device = VK_NULL_HANDLE;
 VkQueue graphicsQueue = VK_NULL_HANDLE;
 VkQueue presentationQueue = VK_NULL_HANDLE;
 VkSurfaceKHR surface;
-
+VkSwapchainKHR swapChain;
+VkImage *swapChainImages;
+uint32_t swapChainImageCount = 0;
+VkFormat swapChainImageFormat;
+VkExtent2D swapChainExtent;
 bool check_validation_layer_support() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
@@ -175,6 +179,38 @@ void free_SwapChainSupportDetails(SwapChainSupportDetails details) {
     free(details.presentModes);
     free(details.formats);
 }
+VkSurfaceFormatKHR choose_swap_surface_format(const SwapChainSupportDetails swapChainDetails) {
+    for (int i = 0; i < swapChainDetails.formatCount; i++) {
+        if (swapChainDetails.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+            swapChainDetails.formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            return swapChainDetails.formats[i];
+        }
+    }
+    return swapChainDetails.formats[0];
+}
+VkPresentModeKHR choost_swap_present_mode(const SwapChainSupportDetails swapChainDetails) {
+    for (int i = 0; i < swapChainDetails.presentModeCount; i++) {
+        if (swapChainDetails.presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return swapChainDetails.presentModes[i];
+        }
+    }
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+#define CLAMP_BETWEEN(val, min, max) (((val) < (min)) ? (min) : ((val) > (max)) ? (max) : (val))
+VkExtent2D choose_swap_extent(const SwapChainSupportDetails swapChainDetails) {
+    if (swapChainDetails.capabilities.currentExtent.width != UINT32_MAX) {
+        return swapChainDetails.capabilities.currentExtent;
+    } else {
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+        VkExtent2D actualExtent = {(uint32_t)width, (uint32_t)height};
+        CLAMP_BETWEEN(actualExtent.width, swapChainDetails.capabilities.minImageExtent.width,
+                      swapChainDetails.capabilities.maxImageExtent.width);
+        CLAMP_BETWEEN(actualExtent.height, swapChainDetails.capabilities.minImageExtent.height,
+                      swapChainDetails.capabilities.maxImageExtent.height);
+        return actualExtent;
+    }
+}
 uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
     uint8_t score = 0;
     VkPhysicalDeviceProperties properties;
@@ -288,6 +324,56 @@ int create_surface() {
     }
 }
 
+int create_swap_chain() {
+    SwapChainSupportDetails details = query_swap_chain_support(physicalDevice);
+    VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(details);
+    VkPresentModeKHR presentMode = choost_swap_present_mode(details);
+    VkExtent2D extent = choose_swap_extent(details);
+    uint32_t imageCount = details.capabilities.minImageCount + 1;
+    if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount) {
+        imageCount = details.capabilities.maxImageCount;
+    }
+    VkSwapchainCreateInfoKHR swapInfo = {0};
+    swapInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapInfo.surface = surface;
+    swapInfo.minImageCount = imageCount;
+    swapInfo.imageFormat = surfaceFormat.format;
+    swapInfo.imageColorSpace = surfaceFormat.colorSpace;
+    swapInfo.imageExtent = extent;
+    swapInfo.imageArrayLayers = 1;
+    swapInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
+    uint32_t queueFamiliesIndices[] = {indices.graphicsFamily, indices.presentaionFamily};
+
+    if (indices.graphicsFamily != indices.presentaionFamily) {
+        swapInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapInfo.queueFamilyIndexCount = 2;
+        swapInfo.pQueueFamilyIndices = queueFamiliesIndices;
+    } else {
+        swapInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapInfo.queueFamilyIndexCount = 0;
+        swapInfo.pQueueFamilyIndices = NULL;
+    }
+    swapInfo.preTransform = details.capabilities.currentTransform;
+    swapInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapInfo.presentMode = presentMode;
+    swapInfo.clipped = VK_TRUE;
+    swapInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(device, &swapInfo, NULL, &swapChain) != VK_SUCCESS) {
+        printf("vkCreateSwapChainKHR failed line %d\n", __LINE__);
+        return 1;
+    }
+
+    vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, NULL);
+    swapChainImages = malloc(swapChainImageCount * sizeof(VkImage));
+    vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages);
+
+    swapChainImageFormat = surfaceFormat.format;
+    swapChainExtent = extent;
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -295,11 +381,13 @@ int init_vulkan() {
         printf("pick_physical_vkdevice Found zero compatible devies\n");
     }
     create_logical_device();
+    create_swap_chain();
 
     return 0;
 }
 
 int deinit_vulkan() {
+    vkDestroySwapchainKHR(device, swapChain, NULL);
     vkDestroyDevice(device, NULL);
     vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
