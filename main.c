@@ -31,10 +31,12 @@ VkQueue graphicsQueue = VK_NULL_HANDLE;
 VkQueue presentationQueue = VK_NULL_HANDLE;
 VkSurfaceKHR surface;
 VkSwapchainKHR swapChain;
-VkImage *swapChainImages;
-uint32_t swapChainImageCount = 0;
 VkFormat swapChainImageFormat;
 VkExtent2D swapChainExtent;
+VkImage *swapChainImages;
+uint32_t swapChainImageCount = 0;
+VkImageView *swapChainImageViews;
+uint32_t swapChainImageViewCount = 0;
 bool check_validation_layer_support() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
@@ -377,6 +379,29 @@ int create_swap_chain() {
     free_SwapChainSupportDetails(details);
     return 0;
 }
+int create_image_views() {
+    swapChainImageViewCount = swapChainImageCount;
+    swapChainImageViews = malloc(swapChainImageViewCount * sizeof(VkImageView));
+    for (int i = 0; i < swapChainImageViewCount; i++) {
+        VkImageViewCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = swapChainImages[i];
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+        if (vkCreateImageView(device, &createInfo, NULL, &swapChainImageViews[i]) != VK_SUCCESS) {
+            printf("vkCreateImageView failed line: %d\n", __LINE__);
+        }
+    }
+
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -385,11 +410,15 @@ int init_vulkan() {
     }
     create_logical_device();
     create_swap_chain();
+    create_image_views();
 
     return 0;
 }
 
 int deinit_vulkan() {
+    for (int i = 0; i < swapChainImageViewCount; i++) {
+        vkDestroyImageView(device, swapChainImageViews[i], NULL);
+    }
     vkDestroySwapchainKHR(device, swapChain, NULL);
     vkDestroyDevice(device, NULL);
     vkDestroySurfaceKHR(instance, surface, NULL);
