@@ -158,7 +158,7 @@ typedef struct {
     VkPresentModeKHR *presentModes;
 } SwapChainSupportDetails;
 
-SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device) {
+SwapChainSupportDetails create_SwapChainSupportDetails(VkPhysicalDevice device) {
     SwapChainSupportDetails details;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -175,6 +175,7 @@ SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device) {
     }
     return details;
 }
+// TODO Ensure all the creations are freed after
 void free_SwapChainSupportDetails(SwapChainSupportDetails details) {
     free(details.presentModes);
     free(details.formats);
@@ -256,11 +257,12 @@ uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
         score = 0;
         return score;
     }
-    SwapChainSupportDetails swapChainSupprt = query_swap_chain_support(device);
-    if (swapChainSupprt.formatCount == 0 || swapChainSupprt.presentModeCount == 0) {
+    SwapChainSupportDetails swapChainSupport = create_SwapChainSupportDetails(device);
+    if (swapChainSupport.formatCount == 0 || swapChainSupport.presentModeCount == 0) {
         score = 0;
         return score;
     }
+    free_SwapChainSupportDetails(swapChainSupport);
 
     return score;
 }
@@ -325,7 +327,7 @@ int create_surface() {
 }
 
 int create_swap_chain() {
-    SwapChainSupportDetails details = query_swap_chain_support(physicalDevice);
+    SwapChainSupportDetails details = create_SwapChainSupportDetails(physicalDevice);
     VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(details);
     VkPresentModeKHR presentMode = choost_swap_present_mode(details);
     VkExtent2D extent = choose_swap_extent(details);
@@ -372,6 +374,7 @@ int create_swap_chain() {
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
+    free_SwapChainSupportDetails(details);
     return 0;
 }
 int init_vulkan() {
