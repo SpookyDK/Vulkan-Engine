@@ -1,6 +1,7 @@
 // This is my attempt at learning to draw a triangle in vulkan over the summer holidays
 // Using the superior language of C over C++bloat
 //
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,35 @@ VkImage *swapChainImages;
 uint32_t swapChainImageCount = 0;
 VkImageView *swapChainImageViews;
 uint32_t swapChainImageViewCount = 0;
+
+int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
+    FILE *file = fopen(filepath, "rb");
+    if (file == NULL) {
+        printf("failed to open file %s c:%d\n", filepath, __LINE__);
+        return 1;
+    }
+    fseek(file, 0, SEEK_END);
+    uint64_t file_size = ftell(file);
+    rewind(file);
+    char *buffer = malloc(file_size);
+    if (buffer == NULL) {
+        printf("failed to malloc %" PRIu64 " bytes c:%d", file_size, __LINE__);
+        fclose(file);
+        return 1;
+    }
+    uint64_t read_size = fread(buffer, 1, file_size, file);
+    if (read_size != file_size) {
+        free(buffer);
+        fclose(file);
+        return 1;
+    }
+    *out = buffer;
+    *out_len = file_size;
+    fclose(file);
+
+    return 0;
+}
+
 bool check_validation_layer_support() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
@@ -73,7 +103,6 @@ int deinit_window() {
 }
 
 int create_instance() {
-
     VkApplicationInfo appInfo = {0};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "UnrealEngine25";
@@ -293,7 +322,6 @@ int pick_physical_vkdevice() {
 // TODO Could be made more flexible, instead of hardcoded FAMILYCOUNT
 #define FAMILYCOUNT 2
 int create_logical_device() {
-
     QueueFamiliyIndices indices = find_queue_families(physicalDevice);
     VkDeviceQueueCreateInfo queueCreateInfo[FAMILYCOUNT] = {};
     uint32_t uniqueQueues[FAMILYCOUNT] = {indices.graphicsFamily, indices.presentaionFamily};
@@ -386,6 +414,8 @@ int create_image_views() {
         VkImageViewCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         createInfo.image = swapChainImages[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = swapChainImageFormat;
         createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -402,6 +432,47 @@ int create_image_views() {
 
     return 0;
 }
+
+VkShaderModule create_shader_modulte(const char *code, const uint64_t len) {
+    VkShaderModuleCreateInfo createInfo = {0};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = len;
+    createInfo.pCode = (const uint32_t *)code;
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &createInfo, NULL, &shaderModule) != VK_SUCCESS) {
+        printf("vkCreateShaderModule failed c:%d", __LINE__);
+    }
+    return shaderModule;
+}
+int create_graphichs_pipeline() {
+    char *triangle_vert;
+    uint64_t triangle_vert_len;
+    load_shader_file("shaders/triangle/vert.spv", &triangle_vert, &triangle_vert_len);
+    VkShaderModule vertShaderModule = create_shader_modulte(triangle_vert, triangle_vert_len);
+
+    char *triangle_frag;
+    uint64_t triangle_frag_len;
+    load_shader_file("shaders/triangle/vert.spv", &triangle_frag, &triangle_frag_len);
+    VkShaderModule fragShaderModule = create_shader_modulte(triangle_frag, triangle_frag_len);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {0};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {0};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+
+    VkPipelineShaderStageCreateInfo shaderstages[] = {vertShaderStageInfo, fragShaderStageInfo};
+    vkDestroyShaderModule(device, vertShaderModule, NULL);
+    vkDestroyShaderModule(device, fragShaderModule, NULL);
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -411,6 +482,7 @@ int init_vulkan() {
     create_logical_device();
     create_swap_chain();
     create_image_views();
+    create_graphichs_pipeline();
 
     return 0;
 }
