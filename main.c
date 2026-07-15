@@ -43,6 +43,8 @@ VkPipelineLayout pipelineLayout;
 VkPipeline graphicsPipeline;
 VkFramebuffer *swapChainFramebuffers;
 uint32_t swapChainFrameBufferCount = 0;
+VkCommandPool commandPool;
+VkCommandBuffer commandBuffer;
 
 typedef enum { TEST, TEST2, TEST3 } test;
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
@@ -659,6 +661,77 @@ int create_render_pass() {
     }
     return 0;
 }
+void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = NULL;
+
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        printf("vkBeginCommandBuffer failed. c:%d\n", __LINE__);
+        return;
+    }
+    VkRenderPassBeginInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = renderpass;
+    renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+    renderPassInfo.renderArea.offset = (VkOffset2D){0, 0};
+    renderPassInfo.renderArea.extent = swapChainExtent;
+
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = swapChainExtent.width;
+    viewport.height = swapChainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    VkRect2D scissor = {};
+    scissor.offset = (VkOffset2D){0, 0};
+    scissor.extent = swapChainExtent;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
+    }
+    return;
+}
+int create_command_pool() {
+    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
+
+    VkCommandPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = indices.graphicsFamily;
+
+    if (vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) != VK_SUCCESS) {
+        printf("vkCreateCommandPool failed. c:%d\n", __LINE__);
+        return 1;
+    }
+
+    return 0;
+}
+int create_command_buffer() {
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+        printf("vkAllocateCommandBuffers failed. c:%d\n", __LINE__);
+        return 1;
+    }
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -671,11 +744,14 @@ int init_vulkan() {
     create_render_pass();
     create_graphichs_pipeline();
     create_frame_buffers();
+    create_command_pool();
+    create_command_buffer();
 
     return 0;
 }
 
 int deinit_vulkan() {
+    vkDestroyCommandPool(device, commandPool, NULL);
 
     for (int i = 0; i < swapChainFrameBufferCount; i++) {
         vkDestroyFramebuffer(device, swapChainFramebuffers[i], NULL);
