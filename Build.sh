@@ -10,7 +10,7 @@ echo "==> Compilation Successful!"
 
 case "$1" in
     run)
-        echo "==> Running progrom..."
+        echo "==> Running program..."
         ./vulkan_test
         ;;
     memtest)

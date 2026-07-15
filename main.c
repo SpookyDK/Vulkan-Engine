@@ -38,7 +38,9 @@ VkImage *swapChainImages;
 uint32_t swapChainImageCount = 0;
 VkImageView *swapChainImageViews;
 uint32_t swapChainImageViewCount = 0;
+VkRenderPass renderpass;
 VkPipelineLayout pipelineLayout;
+VkPipeline graphicsPipeline;
 
 typedef enum { TEST, TEST2, TEST3 } test;
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
@@ -435,7 +437,7 @@ int create_image_views() {
     return 0;
 }
 
-VkShaderModule create_shader_modulte(const char *code, const uint64_t len) {
+VkShaderModule create_shader_module(const char *code, const uint64_t len) {
     VkShaderModuleCreateInfo createInfo = {0};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.codeSize = len;
@@ -450,12 +452,12 @@ int create_graphichs_pipeline() {
     char *triangle_vert;
     uint64_t triangle_vert_len;
     load_shader_file("shaders/triangle/vert.spv", &triangle_vert, &triangle_vert_len);
-    VkShaderModule vertShaderModule = create_shader_modulte(triangle_vert, triangle_vert_len);
+    VkShaderModule vertShaderModule = create_shader_module(triangle_vert, triangle_vert_len);
 
     char *triangle_frag;
     uint64_t triangle_frag_len;
-    load_shader_file("shaders/triangle/vert.spv", &triangle_frag, &triangle_frag_len);
-    VkShaderModule fragShaderModule = create_shader_modulte(triangle_frag, triangle_frag_len);
+    load_shader_file("shaders/triangle/frag.spv", &triangle_frag, &triangle_frag_len);
+    VkShaderModule fragShaderModule = create_shader_module(triangle_frag, triangle_frag_len);
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {0};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -471,8 +473,6 @@ int create_graphichs_pipeline() {
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 
     VkPipelineShaderStageCreateInfo shaderstages[] = {vertShaderStageInfo, fragShaderStageInfo};
-    vkDestroyShaderModule(device, vertShaderModule, NULL);
-    vkDestroyShaderModule(device, fragShaderModule, NULL);
     // TODO maybe this not needed
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -487,10 +487,10 @@ int create_graphichs_pipeline() {
     vertexInputInfo.vertexAttributeDescriptionCount = 0;
     vertexInputInfo.pVertexAttributeDescriptions = NULL;
 
-    VkPipelineInputAssemblyStateCreateInfo inputAseembly = {};
-    inputAseembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAseembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAseembly.primitiveRestartEnable = VK_FALSE;
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
@@ -560,6 +560,75 @@ int create_graphichs_pipeline() {
 
     if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
         printf("vkCreatePipelineLayout failed c:%d\n", __LINE__);
+        vkDestroyShaderModule(device, vertShaderModule, NULL);
+        vkDestroyShaderModule(device, fragShaderModule, NULL);
+        free(triangle_vert);
+        free(triangle_frag);
+        return 1;
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderstages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = NULL;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = renderpass;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineInfo.basePipelineIndex = -1;
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) != VK_SUCCESS) {
+        printf("vkCreateGraphicsPipelines failed: c:%d\n", __LINE__);
+        vkDestroyShaderModule(device, vertShaderModule, NULL);
+        vkDestroyShaderModule(device, fragShaderModule, NULL);
+        free(triangle_vert);
+        free(triangle_frag);
+        return 1;
+    }
+    vkDestroyShaderModule(device, vertShaderModule, NULL);
+    vkDestroyShaderModule(device, fragShaderModule, NULL);
+    free(triangle_vert);
+    free(triangle_frag);
+    return 0;
+}
+
+int create_render_pass() {
+    VkAttachmentDescription colorAttachment = {};
+    colorAttachment.format = swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef = {};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1; // TODO should maybe be 0 to match shader????
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(device, &renderPassInfo, NULL, &renderpass) != VK_SUCCESS) {
+        printf("vkCreateRenderPass failed: c:%d\n", __LINE__);
+        return 1;
     }
     return 0;
 }
@@ -572,13 +641,16 @@ int init_vulkan() {
     create_logical_device();
     create_swap_chain();
     create_image_views();
+    create_render_pass();
     create_graphichs_pipeline();
 
     return 0;
 }
 
 int deinit_vulkan() {
+    vkDestroyPipeline(device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
+    vkDestroyRenderPass(device, renderpass, NULL);
     for (int i = 0; i < swapChainImageViewCount; i++) {
         vkDestroyImageView(device, swapChainImageViews[i], NULL);
     }
@@ -594,9 +666,9 @@ int main() {
     init_window();
     init_vulkan();
 
-    // while (!glfwWindowShouldClose(window)) {
-    //     glfwPollEvents();
-    // }
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+    }
     // do stuff
     //
     deinit_vulkan();
