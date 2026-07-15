@@ -41,6 +41,8 @@ uint32_t swapChainImageViewCount = 0;
 VkRenderPass renderpass;
 VkPipelineLayout pipelineLayout;
 VkPipeline graphicsPipeline;
+VkFramebuffer *swapChainFramebuffers;
+uint32_t swapChainFrameBufferCount = 0;
 
 typedef enum { TEST, TEST2, TEST3 } test;
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
@@ -599,6 +601,31 @@ int create_graphichs_pipeline() {
     return 0;
 }
 
+int create_frame_buffers() {
+    swapChainFrameBufferCount = swapChainImageViewCount;
+    swapChainFramebuffers = malloc(swapChainFrameBufferCount * sizeof(VkFramebuffer));
+
+    for (int i = 0; i < swapChainImageViewCount; i++) {
+        VkImageView attachments[] = {swapChainImageViews[i]};
+
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = renderpass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = swapChainExtent.width;
+        framebufferInfo.height = swapChainExtent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(device, &framebufferInfo, NULL, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+            printf("vkCreateFrameBuffer failed idx %d, c:%d\n", i, __LINE__);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 int create_render_pass() {
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
@@ -643,11 +670,17 @@ int init_vulkan() {
     create_image_views();
     create_render_pass();
     create_graphichs_pipeline();
+    create_frame_buffers();
 
     return 0;
 }
 
 int deinit_vulkan() {
+
+    for (int i = 0; i < swapChainFrameBufferCount; i++) {
+        vkDestroyFramebuffer(device, swapChainFramebuffers[i], NULL);
+    }
+
     vkDestroyPipeline(device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
     vkDestroyRenderPass(device, renderpass, NULL);
