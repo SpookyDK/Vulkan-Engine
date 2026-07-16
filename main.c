@@ -408,7 +408,7 @@ int create_swap_chain() {
 
     vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, NULL);
     swapChainImages = malloc(swapChainImageCount * sizeof(VkImage));
-    vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages);
+    vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, swapChainImages);
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
@@ -645,8 +645,16 @@ int create_render_pass() {
 
     VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1; // TODO should maybe be 0 to match shader????
+    subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -654,6 +662,8 @@ int create_render_pass() {
     renderPassInfo.pAttachments = &colorAttachment;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(device, &renderPassInfo, NULL, &renderpass) != VK_SUCCESS) {
         printf("vkCreateRenderPass failed: c:%d\n", __LINE__);
@@ -732,6 +742,27 @@ int create_command_buffer() {
     }
     return 0;
 }
+VkSemaphore imageAvaiableSemaphore;
+VkSemaphore renderFinishedSemaphore;
+VkFence inFlightFence;
+int create_sync_objects() {
+    VkSemaphoreCreateInfo semaphoreInfo = {};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo = {};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkResult result = VK_SUCCESS;
+    result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &imageAvaiableSemaphore);
+    result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
+    result = vkCreateFence(device, &fenceInfo, NULL, &inFlightFence);
+
+    if (result != VK_SUCCESS) {
+        printf("Failed to create sync object c:%d\n", __LINE__);
+        return 1;
+    }
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -746,11 +777,15 @@ int init_vulkan() {
     create_frame_buffers();
     create_command_pool();
     create_command_buffer();
+    create_sync_objects();
 
     return 0;
 }
 
 int deinit_vulkan() {
+    vkDestroySemaphore(device, imageAvaiableSemaphore, NULL);
+    vkDestroySemaphore(device, renderFinishedSemaphore, NULL);
+    vkDestroyFence(device, inFlightFence, NULL);
     vkDestroyCommandPool(device, commandPool, NULL);
 
     for (int i = 0; i < swapChainFrameBufferCount; i++) {
@@ -771,13 +806,50 @@ int deinit_vulkan() {
     return 0;
 }
 
+void draw_frame() {
+    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(device, 1, &inFlightFence);
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    vkResetCommandBuffer(commandBuffer, 0);
+    record_command_buffer(commandBuffer, imageIndex);
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VkSemaphore waitSemaphores[] = {imageAvaiableSemaphore};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+        printf("vkQueueSubmit failed. c:%d\n", __LINE__);
+        return;
+    }
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = {swapChain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = NULL;
+    vkQueuePresentKHR(presentationQueue, &presentInfo);
+}
 int main() {
     init_window();
     init_vulkan();
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        draw_frame();
     }
+    vkDeviceWaitIdle(device);
     // do stuff
     //
     deinit_vulkan();
