@@ -50,6 +50,7 @@ VkCommandBuffer commandBuffer[MAX_FRAMES_IN_FLIGHT];
 VkSemaphore imageAvaiableSemaphore[MAX_FRAMES_IN_FLIGHT];
 VkSemaphore renderFinishedSemaphore[MAX_FRAMES_IN_FLIGHT];
 VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
+bool framebufferResized = false;
 
 typedef enum { TEST, TEST2, TEST3 } test;
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
@@ -102,11 +103,13 @@ bool check_validation_layer_support() {
     }
     return true;
 }
+static void framebufferResizedCallback(GLFWwindow *window, int width, int height) { framebufferResized = true; }
 int init_window() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "UnrealEngine25", NULL, NULL);
+    glfwSetFramebufferSizeCallback(window, framebufferResizedCallback);
     return 0;
 }
 int deinit_window() {
@@ -785,6 +788,16 @@ int init_vulkan() {
     return 0;
 }
 
+void cleanup_swap_chain() {
+    for (int i = 0; i < swapChainFrameBufferCount; i++) {
+        vkDestroyFramebuffer(device, swapChainFramebuffers[i], NULL);
+    }
+
+    for (int i = 0; i < swapChainImageViewCount; i++) {
+        vkDestroyImageView(device, swapChainImageViews[i], NULL);
+    }
+    vkDestroySwapchainKHR(device, swapChain, NULL);
+}
 int deinit_vulkan() {
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(device, imageAvaiableSemaphore[i], NULL);
@@ -793,17 +806,10 @@ int deinit_vulkan() {
     }
     vkDestroyCommandPool(device, commandPool, NULL);
 
-    for (int i = 0; i < swapChainFrameBufferCount; i++) {
-        vkDestroyFramebuffer(device, swapChainFramebuffers[i], NULL);
-    }
-
+    cleanup_swap_chain();
     vkDestroyPipeline(device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
     vkDestroyRenderPass(device, renderpass, NULL);
-    for (int i = 0; i < swapChainImageViewCount; i++) {
-        vkDestroyImageView(device, swapChainImageViews[i], NULL);
-    }
-    vkDestroySwapchainKHR(device, swapChain, NULL);
     vkDestroyDevice(device, NULL);
     vkDestroySurfaceKHR(instance, surface, NULL);
     vkDestroyInstance(instance, NULL);
@@ -811,12 +817,34 @@ int deinit_vulkan() {
     return 0;
 }
 
+void recreateSwapChain() {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(device);
+    cleanup_swap_chain();
+    create_swap_chain();
+    create_image_views();
+    create_frame_buffers();
+}
 uint32_t currentFrame = 0;
 void draw_frame() {
     vkWaitForFences(device, 1, &inFlightFence[currentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(device, 1, &inFlightFence[currentFrame]);
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    VkResult result =
+        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapChain();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        printf("Filed to acquire swap chain image. :c%d\n", __LINE__);
+    }
+    vkResetFences(device, 1, &inFlightFence[currentFrame]);
     vkResetCommandBuffer(commandBuffer[currentFrame], 0);
     record_command_buffer(commandBuffer[currentFrame], imageIndex);
     VkSubmitInfo submitInfo = {};
@@ -846,8 +874,17 @@ void draw_frame() {
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = NULL;
     vkQueuePresentKHR(presentationQueue, &presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+        framebufferResized = false;
+        recreateSwapChain();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        printf("Filed to acquire swap chain image. :c%d\n", __LINE__);
+    }
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
+
 int main() {
     init_window();
     init_vulkan();
