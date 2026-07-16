@@ -797,6 +797,9 @@ void cleanup_swap_chain() {
         vkDestroyImageView(device, swapChainImageViews[i], NULL);
     }
     vkDestroySwapchainKHR(device, swapChain, NULL);
+    free(swapChainImageViews);
+    free(swapChainImages);
+    free(swapChainFramebuffers);
 }
 int deinit_vulkan() {
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
