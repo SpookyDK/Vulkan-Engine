@@ -44,7 +44,12 @@ VkPipeline graphicsPipeline;
 VkFramebuffer *swapChainFramebuffers;
 uint32_t swapChainFrameBufferCount = 0;
 VkCommandPool commandPool;
-VkCommandBuffer commandBuffer;
+
+#define MAX_FRAMES_IN_FLIGHT 2
+VkCommandBuffer commandBuffer[MAX_FRAMES_IN_FLIGHT];
+VkSemaphore imageAvaiableSemaphore[MAX_FRAMES_IN_FLIGHT];
+VkSemaphore renderFinishedSemaphore[MAX_FRAMES_IN_FLIGHT];
+VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
 
 typedef enum { TEST, TEST2, TEST3 } test;
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
@@ -734,17 +739,14 @@ int create_command_buffer() {
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = commandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
+    allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
-    if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+    if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffer) != VK_SUCCESS) {
         printf("vkAllocateCommandBuffers failed. c:%d\n", __LINE__);
         return 1;
     }
     return 0;
 }
-VkSemaphore imageAvaiableSemaphore;
-VkSemaphore renderFinishedSemaphore;
-VkFence inFlightFence;
 int create_sync_objects() {
     VkSemaphoreCreateInfo semaphoreInfo = {};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -753,10 +755,11 @@ int create_sync_objects() {
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     VkResult result = VK_SUCCESS;
-    result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &imageAvaiableSemaphore);
-    result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore);
-    result = vkCreateFence(device, &fenceInfo, NULL, &inFlightFence);
-
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &imageAvaiableSemaphore[i]);
+        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore[i]);
+        result = vkCreateFence(device, &fenceInfo, NULL, &inFlightFence[i]);
+    }
     if (result != VK_SUCCESS) {
         printf("Failed to create sync object c:%d\n", __LINE__);
         return 1;
@@ -783,9 +786,11 @@ int init_vulkan() {
 }
 
 int deinit_vulkan() {
-    vkDestroySemaphore(device, imageAvaiableSemaphore, NULL);
-    vkDestroySemaphore(device, renderFinishedSemaphore, NULL);
-    vkDestroyFence(device, inFlightFence, NULL);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(device, imageAvaiableSemaphore[i], NULL);
+        vkDestroySemaphore(device, renderFinishedSemaphore[i], NULL);
+        vkDestroyFence(device, inFlightFence[i], NULL);
+    }
     vkDestroyCommandPool(device, commandPool, NULL);
 
     for (int i = 0; i < swapChainFrameBufferCount; i++) {
@@ -806,26 +811,27 @@ int deinit_vulkan() {
     return 0;
 }
 
+uint32_t currentFrame = 0;
 void draw_frame() {
-    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(device, 1, &inFlightFence);
+    vkWaitForFences(device, 1, &inFlightFence[currentFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(device, 1, &inFlightFence[currentFrame]);
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore, VK_NULL_HANDLE, &imageIndex);
-    vkResetCommandBuffer(commandBuffer, 0);
-    record_command_buffer(commandBuffer, imageIndex);
+    vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    vkResetCommandBuffer(commandBuffer[currentFrame], 0);
+    record_command_buffer(commandBuffer[currentFrame], imageIndex);
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    VkSemaphore waitSemaphores[] = {imageAvaiableSemaphore};
+    VkSemaphore waitSemaphores[] = {imageAvaiableSemaphore[currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore[currentFrame]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+    submitInfo.pCommandBuffers = &commandBuffer[currentFrame];
+    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence[currentFrame]) != VK_SUCCESS) {
         printf("vkQueueSubmit failed. c:%d\n", __LINE__);
         return;
     }
@@ -840,6 +846,7 @@ void draw_frame() {
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = NULL;
     vkQueuePresentKHR(presentationQueue, &presentInfo);
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 int main() {
     init_window();
