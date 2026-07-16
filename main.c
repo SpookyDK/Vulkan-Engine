@@ -9,6 +9,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
+#define CGLM_HEADER_ONLY
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE // For Vulkan
+#include "include/cglm/cglm.h"
+#include "include/cglm/struct.h"
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
@@ -52,7 +56,36 @@ VkSemaphore renderFinishedSemaphore[MAX_FRAMES_IN_FLIGHT];
 VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
 bool framebufferResized = false;
 
-typedef enum { TEST, TEST2, TEST3 } test;
+typedef struct {
+    vec2s pos;
+    vec3s color;
+} Vertex;
+Vertex vertices[] = {{.pos = {{0.0f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}},
+                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}},
+                     {.pos = {{-0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}}};
+VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
+    VkVertexInputBindingDescription bindingDescription = {};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    return bindingDescription;
+}
+int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescriptions, uint32_t *pAttributeDescriptionCount) {
+    if (*pAttributeDescriptionCount == 0 || pAttributeDescriptions == NULL) {
+        return 1;
+    }
+    pAttributeDescriptions[0].binding = 0;
+    pAttributeDescriptions[0].location = 0;
+    pAttributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    pAttributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+    pAttributeDescriptions[1].binding = 0;
+    pAttributeDescriptions[1].location = 1;
+    pAttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    pAttributeDescriptions[1].offset = offsetof(Vertex, color);
+
+    return 0;
+}
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
     FILE *file = fopen(filepath, "rb");
     if (file == NULL) {
@@ -492,12 +525,17 @@ int create_graphichs_pipeline() {
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates = dynamicStates;
 
+    VkVertexInputBindingDescription bindingDescription = getBindingDescription(vertices, 3);
+    uint32_t AttributeDescriptionCount = 2;
+    VkVertexInputAttributeDescription AttributeDescriptions[AttributeDescriptionCount];
+    getAttributeDescriptions(AttributeDescriptions, &AttributeDescriptionCount);
+
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.pVertexBindingDescriptions = NULL;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions = NULL;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = AttributeDescriptionCount;
+    vertexInputInfo.pVertexAttributeDescriptions = AttributeDescriptions;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -608,6 +646,7 @@ int create_graphichs_pipeline() {
     vkDestroyShaderModule(device, fragShaderModule, NULL);
     free(triangle_vert);
     free(triangle_frag);
+
     return 0;
 }
 
