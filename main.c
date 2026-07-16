@@ -56,11 +56,13 @@ VkSemaphore renderFinishedSemaphore[MAX_FRAMES_IN_FLIGHT];
 VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
 bool framebufferResized = false;
 
+VkBuffer vertexBuffer;
+VkDeviceMemory vertexBufferMemory;
 typedef struct {
     vec2s pos;
     vec3s color;
 } Vertex;
-Vertex vertices[] = {{.pos = {{0.0f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}},
+Vertex vertices[] = {{.pos = {{0.0f, -0.5f}}, .color = {{1.0f, 0.0f, 1.0f}}},
                      {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}},
                      {.pos = {{-0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}}};
 VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
@@ -754,6 +756,9 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -808,6 +813,49 @@ int create_sync_objects() {
     }
     return 0;
 }
+uint32_t find_memory_type(uint32_t typeFiler, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    for (int i = 0; i < memProperties.memoryTypeCount; i++) {
+        if (typeFiler & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+    printf("failed to find suitable memory type c:%d\n", __LINE__);
+    return 0;
+}
+int create_vertex_buffer() {
+
+    VkBufferCreateInfo bufferInfo = {0};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * 3;
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device, &bufferInfo, NULL, &vertexBuffer) != VK_SUCCESS) {
+        printf("vkCreateBuffer failed. c:%d\n", __LINE__);
+        return 1;
+    }
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        find_memory_type(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(device, &allocInfo, NULL, &vertexBufferMemory) != VK_SUCCESS) {
+        printf("vkAllocateMemory failed, size %d, c:%d\n", memRequirements.size, __LINE__);
+        return 1;
+    }
+    vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+    void *data;
+    vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, vertices, bufferInfo.size);
+    vkUnmapMemory(device, vertexBufferMemory);
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -821,6 +869,7 @@ int init_vulkan() {
     create_graphichs_pipeline();
     create_frame_buffers();
     create_command_pool();
+    create_vertex_buffer();
     create_command_buffer();
     create_sync_objects();
 
@@ -849,6 +898,8 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroyBuffer(device, vertexBuffer, NULL);
+    vkFreeMemory(device, vertexBufferMemory, NULL);
     vkDestroyPipeline(device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(device, pipelineLayout, NULL);
     vkDestroyRenderPass(device, renderpass, NULL);
