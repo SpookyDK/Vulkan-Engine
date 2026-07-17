@@ -58,13 +58,17 @@ bool framebufferResized = false;
 
 VkBuffer vertexBuffer;
 VkDeviceMemory vertexBufferMemory;
+VkBuffer indexBuffer;
+VkDeviceMemory indexBufferMemory;
 typedef struct {
     vec2s pos;
     vec3s color;
 } Vertex;
-Vertex vertices[] = {{.pos = {{0.0f, -0.5f}}, .color = {{1.0f, 0.0f, 1.0f}}},
-                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}},
-                     {.pos = {{-0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}}};
+Vertex vertices[] = {{.pos = {{-0.5f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}},
+                     {.pos = {{0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}},
+                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}},
+                     {.pos = {{-0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}}};
+const uint16_t indices[] = {0, 1, 2, 2, 3, 0};
 VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
     VkVertexInputBindingDescription bindingDescription = {};
     bindingDescription.binding = 0;
@@ -759,7 +763,9 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
@@ -876,8 +882,27 @@ int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyF
     vkBindBufferMemory(device, *buffer, *buffermemory, 0);
     return 0;
 }
+int create_index_buffer() {
+    VkDeviceSize bufferSize = sizeof(indices);
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                  &stagingBuffer, &stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices, bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+    create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                  &indexBuffer, &indexBufferMemory);
+    copy_buffer(stagingBuffer, indexBuffer, bufferSize);
+    vkDestroyBuffer(device, stagingBuffer, NULL);
+    vkFreeMemory(device, stagingBufferMemory, NULL);
+
+    return 0;
+}
 int create_vertex_buffer() {
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * 3;
+    VkDeviceSize bufferSize = sizeof(vertices);
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -908,6 +933,7 @@ int init_vulkan() {
     create_graphichs_pipeline();
     create_frame_buffers();
     create_command_pool();
+    create_index_buffer();
     create_vertex_buffer();
     create_command_buffer();
     create_sync_objects();
@@ -937,6 +963,8 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroyBuffer(device, indexBuffer, NULL);
+    vkFreeMemory(device, indexBufferMemory, NULL);
     vkDestroyBuffer(device, vertexBuffer, NULL);
     vkFreeMemory(device, vertexBufferMemory, NULL);
     vkDestroyPipeline(device, graphicsPipeline, NULL);
