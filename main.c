@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
@@ -43,6 +44,8 @@ uint32_t swapChainImageCount = 0;
 VkImageView *swapChainImageViews;
 uint32_t swapChainImageViewCount = 0;
 VkRenderPass renderpass;
+
+VkDescriptorSetLayout descriptorSetLayout;
 VkPipelineLayout pipelineLayout;
 VkPipeline graphicsPipeline;
 VkFramebuffer *swapChainFramebuffers;
@@ -60,6 +63,10 @@ VkBuffer vertexBuffer;
 VkDeviceMemory vertexBufferMemory;
 VkBuffer indexBuffer;
 VkDeviceMemory indexBufferMemory;
+
+VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
+VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
+void *uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
 typedef struct {
     vec2s pos;
     vec3s color;
@@ -91,6 +98,28 @@ int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescri
     pAttributeDescriptions[1].offset = offsetof(Vertex, color);
 
     return 0;
+}
+
+typedef struct {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} UniformBufferObject;
+void create_descriptor_set_layout() {
+    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = NULL;
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
+        printf("vkCreateDescriptorSetLayout failed. c:%d\n", __LINE__);
+    }
 }
 int load_shader_file(const char *filepath, char **out, uint64_t *out_len) {
     FILE *file = fopen(filepath, "rb");
@@ -609,8 +638,8 @@ int create_graphichs_pipeline() {
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = NULL;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = NULL;
 
@@ -920,6 +949,16 @@ int create_vertex_buffer() {
 
     return 0;
 }
+int create_uniform_buffers() {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        create_buffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i],
+                      &uniformBuffersMemory[i]);
+        vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+    }
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -935,6 +974,7 @@ int init_vulkan() {
     create_command_pool();
     create_index_buffer();
     create_vertex_buffer();
+    create_uniform_buffers();
     create_command_buffer();
     create_sync_objects();
 
@@ -963,6 +1003,11 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(device, uniformBuffers[i], NULL);
+        vkFreeMemory(device, uniformBuffersMemory[i], NULL);
+    }
     vkDestroyBuffer(device, indexBuffer, NULL);
     vkFreeMemory(device, indexBufferMemory, NULL);
     vkDestroyBuffer(device, vertexBuffer, NULL);
@@ -991,6 +1036,9 @@ void recreateSwapChain() {
     create_image_views();
     create_frame_buffers();
 }
+void update_uniform_buffer(uint32_t currentFrame) {
+    // TODO Got to here
+}
 uint32_t currentFrame = 0;
 void draw_frame() {
     vkWaitForFences(device, 1, &inFlightFence[currentFrame], VK_TRUE, UINT64_MAX);
@@ -1007,6 +1055,7 @@ void draw_frame() {
     vkResetFences(device, 1, &inFlightFence[currentFrame]);
     vkResetCommandBuffer(commandBuffer[currentFrame], 0);
     record_command_buffer(commandBuffer[currentFrame], imageIndex);
+    update_uniform_buffer(currentFrame);
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     VkSemaphore waitSemaphores[] = {imageAvaiableSemaphore[currentFrame]};
