@@ -67,6 +67,7 @@ VkDeviceMemory indexBufferMemory;
 VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
 VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
 void *uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
+
 typedef struct {
     vec2s pos;
     vec3s color;
@@ -1004,6 +1005,7 @@ int deinit_vulkan() {
 
     cleanup_swap_chain();
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, uniformBuffers[i], NULL);
         vkFreeMemory(device, uniformBuffersMemory[i], NULL);
@@ -1036,8 +1038,17 @@ void recreateSwapChain() {
     create_image_views();
     create_frame_buffers();
 }
-void update_uniform_buffer(uint32_t currentFrame) {
-    // TODO Got to here
+
+void update_uniform_buffer(uint32_t currentImage) {
+    UniformBufferObject ubo = {};
+    float deltaTime = 0.1;
+    // ubo.model = glms_rotate((mat4s){1.0f}, deltaTime * glm_rad(90.0f), (vec3s){0.0f, 0.0f, 1.0f});
+    glm_rotate(ubo.model, deltaTime * glm_rad(90.0f), (vec3){0.0f, 0.0f, 1.0f});
+    glms_lookat((vec3s){2.0f, 2.0f, 2.0f}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
+    // TODO Fix all these rotations
+    //
+    ubo.proj[1][1] *= -1;
+    memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 uint32_t currentFrame = 0;
 void draw_frame() {
