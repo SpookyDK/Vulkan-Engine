@@ -56,8 +56,8 @@ VkCommandPool commandPool;
 
 #define MAX_FRAMES_IN_FLIGHT 2
 VkCommandBuffer commandBuffer[MAX_FRAMES_IN_FLIGHT];
-VkSemaphore imageAvaiableSemaphore[MAX_FRAMES_IN_FLIGHT];
-VkSemaphore renderFinishedSemaphore[MAX_FRAMES_IN_FLIGHT];
+VkSemaphore imageAvaiableSemaphores[MAX_FRAMES_IN_FLIGHT];
+VkSemaphore renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
 VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
 bool framebufferResized = false;
 
@@ -891,8 +891,8 @@ int create_sync_objects() {
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     VkResult result = VK_SUCCESS;
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &imageAvaiableSemaphore[i]);
-        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphore[i]);
+        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &imageAvaiableSemaphores[i]);
+        result = vkCreateSemaphore(device, &semaphoreInfo, NULL, &renderFinishedSemaphores[i]);
         result = vkCreateFence(device, &fenceInfo, NULL, &inFlightFence[i]);
     }
     if (result != VK_SUCCESS) {
@@ -1052,8 +1052,8 @@ void cleanup_swap_chain() {
 }
 int deinit_vulkan() {
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(device, imageAvaiableSemaphore[i], NULL);
-        vkDestroySemaphore(device, renderFinishedSemaphore[i], NULL);
+        vkDestroySemaphore(device, imageAvaiableSemaphores[i], NULL);
+        vkDestroySemaphore(device, renderFinishedSemaphores[i], NULL);
         vkDestroyFence(device, inFlightFence[i], NULL);
     }
     vkDestroyCommandPool(device, commandPool, NULL);
@@ -1099,7 +1099,7 @@ void update_uniform_buffer(uint32_t currentImage) {
     UniformBufferObject ubo = {};
     glm_mat4_identity(ubo.model);
     float time = (float)glfwGetTime();
-    glm_rotate(ubo.model, time * glm_rad(90.0f), (vec3){0.0f, 0.0f, 1.0f});
+    glm_rotate(ubo.model, time * glm_rad(90.0f), (vec3){0.0f, 0.1f, 1.0f});
     glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
     glm_perspective(glm_rad(45.0f), (float)swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f, ubo.proj);
     ubo.proj[1][1] *= -1;
@@ -1110,41 +1110,44 @@ void draw_frame() {
     uint32_t imageIndex;
 
     VkResult result =
-        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvaiableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        printf("Filed to acquire swap chain image. :c%d\n", __LINE__);
+        printf("Failed to acquire swap chain image. :c%d\n", __LINE__);
     }
+    update_uniform_buffer(currentFrame);
     vkResetFences(device, 1, &inFlightFence[currentFrame]);
     vkResetCommandBuffer(commandBuffer[currentFrame], 0);
     record_command_buffer(commandBuffer[currentFrame], imageIndex);
-    update_uniform_buffer(currentFrame);
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    VkSemaphore waitSemaphores[] = {imageAvaiableSemaphore[currentFrame]};
+    VkSemaphore waitSemaphores[] = {imageAvaiableSemaphores[currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore[currentFrame]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer[currentFrame];
+
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
     if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence[currentFrame]) != VK_SUCCESS) {
         printf("vkQueueSubmit failed. c:%d\n", __LINE__);
         return;
     }
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
     VkSwapchainKHR swapChains[] = {swapChain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
+
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = NULL;
     vkQueuePresentKHR(presentationQueue, &presentInfo);
