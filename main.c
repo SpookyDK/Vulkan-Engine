@@ -68,6 +68,9 @@ VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
 VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
 void *uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
 
+VkDescriptorPool descriptorPool;
+VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
+
 typedef struct {
     vec2s pos;
     vec3s color;
@@ -217,6 +220,50 @@ int create_instance() {
     }
     return 0;
 }
+void create_descriptor_pool() {
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
+    if (vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) != VK_SUCCESS) {
+        printf("vkCreateDescriptorPool failed c:%d\n", __LINE__);
+    }
+}
+void create_descriptor_sets() {
+    VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = {descriptorSetLayout, descriptorSetLayout};
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+    allocInfo.pSetLayouts = layouts;
+    if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets) != VK_SUCCESS) {
+        printf("vkAllocateDescriptorSets failed. c:%d\n", __LINE__);
+        return;
+    }
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = uniformBuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite = {};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+        descriptorWrite.pImageInfo = NULL;
+        descriptorWrite.pTexelBufferView = NULL;
+        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
+    }
+}
 
 typedef struct {
     int32_t graphicsFamily;
@@ -225,7 +272,7 @@ typedef struct {
 QueueFamiliyIndices find_queue_families(VkPhysicalDevice device) {
     QueueFamiliyIndices indices;
     indices.graphicsFamily = -1;
-    indices.graphicsFamily = -1;
+    indices.presentaionFamily = -1;
 
     uint32_t queueFamiliyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, NULL);
@@ -256,8 +303,8 @@ bool check_device_extension_support(VkPhysicalDevice device) {
 
     for (int i = 0; i < requiredExtensionCount; i++) {
         extensionsFound = false;
-        for (int j = 0; i < extensionCount; i++) {
-            if (strcmp(deviceExtensions[i], avaiableExtensions[j].extensionName)) {
+        for (int j = 0; j < extensionCount; j++) {
+            if (!strcmp(deviceExtensions[i], avaiableExtensions[j].extensionName)) {
                 extensionsFound = true;
                 break;
             }
@@ -439,6 +486,7 @@ int create_surface() {
     if (glfwCreateWindowSurface(instance, window, NULL, &surface) != VK_SUCCESS) {
         printf("Failed to create window surface %d\n", __LINE__);
     }
+    return 0;
 }
 
 int create_swap_chain() {
@@ -600,7 +648,7 @@ int create_graphichs_pipeline() {
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f;
     rasterizer.depthBiasClamp = 0.0f;
@@ -711,6 +759,7 @@ int create_frame_buffers() {
     return 0;
 }
 
+uint32_t currentFrame = 0;
 int create_render_pass() {
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
@@ -795,6 +844,7 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
     vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -970,12 +1020,15 @@ int init_vulkan() {
     create_swap_chain();
     create_image_views();
     create_render_pass();
+    create_descriptor_set_layout();
     create_graphichs_pipeline();
     create_frame_buffers();
     create_command_pool();
-    create_index_buffer();
     create_vertex_buffer();
+    create_index_buffer();
     create_uniform_buffers();
+    create_descriptor_pool();
+    create_descriptor_sets();
     create_command_buffer();
     create_sync_objects();
 
@@ -1004,6 +1057,7 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroyDescriptorPool(device, descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1050,7 +1104,6 @@ void update_uniform_buffer(uint32_t currentImage) {
     ubo.proj[1][1] *= -1;
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
-uint32_t currentFrame = 0;
 void draw_frame() {
     vkWaitForFences(device, 1, &inFlightFence[currentFrame], VK_TRUE, UINT64_MAX);
     uint32_t imageIndex;

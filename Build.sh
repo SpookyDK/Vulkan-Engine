@@ -3,7 +3,7 @@
 set -e
 
 echo "==> Compiling main.c...."
-gcc main.c -o vulkan_test -lvulkan -lglfw
+gcc main.c -o vulkan_test -lvulkan -lglfw -lm
 echo "==> Compilation Successful!"
 
 
