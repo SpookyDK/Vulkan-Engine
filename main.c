@@ -1095,12 +1095,11 @@ void recreateSwapChain() {
 
 void update_uniform_buffer(uint32_t currentImage) {
     UniformBufferObject ubo = {};
-    float deltaTime = 0.1;
-    // ubo.model = glms_rotate((mat4s){1.0f}, deltaTime * glm_rad(90.0f), (vec3s){0.0f, 0.0f, 1.0f});
-    glm_rotate(ubo.model, deltaTime * glm_rad(90.0f), (vec3){0.0f, 0.0f, 1.0f});
-    glms_lookat((vec3s){2.0f, 2.0f, 2.0f}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
-    // TODO Fix all these rotations
-    //
+    glm_mat4_identity(ubo.model);
+    float time = (float)glfwGetTime();
+    glm_rotate(ubo.model, time * glm_rad(90.0f), (vec3){0.0f, 0.0f, 1.0f});
+    glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
+    glm_perspective(glm_rad(45.0f), (float)swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f, ubo.proj);
     ubo.proj[1][1] *= -1;
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
