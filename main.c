@@ -11,6 +11,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #define CGLM_HEADER_ONLY
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE // For Vulkan
 #include "include/cglm/cglm.h"
 #include "include/cglm/struct.h"
