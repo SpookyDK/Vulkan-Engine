@@ -84,11 +84,12 @@ VkSampler textureSampler;
 typedef struct {
     vec2s pos;
     vec3s color;
+    vec2s texCoord;
 } Vertex;
-Vertex vertices[] = {{.pos = {{-0.5f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}},
-                     {.pos = {{0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}},
-                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}},
-                     {.pos = {{-0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}}};
+Vertex vertices[] = {{.pos = {{-0.5f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
+                     {.pos = {{0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
+                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}},
+                     {.pos = {{-0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}}};
 const uint16_t indices[] = {0, 1, 2, 2, 3, 0};
 VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
     VkVertexInputBindingDescription bindingDescription = {};
@@ -111,6 +112,11 @@ int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescri
     pAttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     pAttributeDescriptions[1].offset = offsetof(Vertex, color);
 
+    pAttributeDescriptions[2].binding = 0;
+    pAttributeDescriptions[2].location = 2;
+    pAttributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    pAttributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
     return 0;
 }
 
@@ -120,16 +126,24 @@ typedef struct {
     mat4 proj;
 } UniformBufferObject;
 void create_descriptor_set_layout() {
+    VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+    samplerLayoutBinding.binding = 1;
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBinding.pImmutableSamplers = NULL;
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutBinding.pImmutableSamplers = NULL;
+    VkDescriptorSetLayoutBinding bindings[] = {uboLayoutBinding, samplerLayoutBinding};
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboLayoutBinding;
+    layoutInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
+    // layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
         printf("vkCreateDescriptorSetLayout failed. c:%d\n", __LINE__);
@@ -231,14 +245,16 @@ int create_instance() {
     return 0;
 }
 void create_descriptor_pool() {
-    VkDescriptorPoolSize poolSize = {};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolSize poolSizes[2] = {};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+    poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
     if (vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) != VK_SUCCESS) {
         printf("vkCreateDescriptorPool failed c:%d\n", __LINE__);
@@ -260,18 +276,31 @@ void create_descriptor_sets() {
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = textureImageView;
+        imageInfo.sampler = textureSampler;
 
-        VkWriteDescriptorSet descriptorWrite = {};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = descriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
-        descriptorWrite.pImageInfo = NULL;
-        descriptorWrite.pTexelBufferView = NULL;
-        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
+        VkWriteDescriptorSet descriptorWrites[2] = {};
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &bufferInfo;
+        descriptorWrites[0].pImageInfo = NULL;
+        descriptorWrites[0].pTexelBufferView = NULL;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = NULL;
+        descriptorWrites[1].pImageInfo = &imageInfo;
+        vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, NULL);
     }
 }
 
@@ -625,7 +654,7 @@ int create_graphichs_pipeline() {
     dynamicState.pDynamicStates = dynamicStates;
 
     VkVertexInputBindingDescription bindingDescription = getBindingDescription(vertices, 3);
-    uint32_t AttributeDescriptionCount = 2;
+    uint32_t AttributeDescriptionCount = 3;
     VkVertexInputAttributeDescription AttributeDescriptions[AttributeDescriptionCount];
     getAttributeDescriptions(AttributeDescriptions, &AttributeDescriptionCount);
 
@@ -1202,6 +1231,7 @@ int init_vulkan() {
     create_texture_image();
     create_vertex_buffer();
     create_texture_image_view();
+    create_texture_sampler();
     create_index_buffer();
     create_uniform_buffers();
     create_descriptor_pool();
