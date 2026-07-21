@@ -78,6 +78,8 @@ VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
 
 VkImage textureImage;
 VkDeviceMemory textureImageMemory;
+VkImageView textureImageView;
+VkSampler textureSampler;
 
 typedef struct {
     vec2s pos;
@@ -433,6 +435,10 @@ uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
         score = 0;
         return score;
     }
+    if (features.samplerAnisotropy != VK_TRUE) {
+        score = 0;
+        return score;
+    }
     free_SwapChainSupportDetails(swapChainSupport);
 
     return score;
@@ -474,6 +480,7 @@ int create_logical_device() {
         queueCreateInfo[i].pQueuePriorities = &queuePriority;
     }
     VkPhysicalDeviceFeatures deviceFeatures = {0};
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfo;
@@ -1136,6 +1143,48 @@ int create_texture_image() {
     vkFreeMemory(device, stagingBufferMemory, NULL);
     return 0;
 }
+int create_texture_image_view() {
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = textureImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(device, &viewInfo, NULL, &textureImageView) != VK_SUCCESS) {
+        printf("vkCreateImageView failed. c:%d\n", __LINE__);
+    }
+    return 0;
+}
+int create_texture_sampler() {
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    VkPhysicalDeviceProperties properties = {};
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    if (vkCreateSampler(device, &samplerInfo, NULL, &textureSampler) != VK_SUCCESS) {
+        printf("vkCreateSampler failed. c:%d\n", __LINE__);
+        return 1;
+    }
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -1152,6 +1201,7 @@ int init_vulkan() {
     create_command_pool();
     create_texture_image();
     create_vertex_buffer();
+    create_texture_image_view();
     create_index_buffer();
     create_uniform_buffers();
     create_descriptor_pool();
@@ -1184,6 +1234,8 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroySampler(device, textureSampler, NULL);
+    vkDestroyImageView(device, textureImageView, NULL);
     vkDestroyImage(device, textureImage, NULL);
     vkFreeMemory(device, textureImageMemory, NULL);
     vkDestroyDescriptorPool(device, descriptorPool, NULL);
