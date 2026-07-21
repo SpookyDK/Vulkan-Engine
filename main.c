@@ -17,6 +17,9 @@
 #include "include/cglm/cglm.h"
 #include "include/cglm/struct.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "include/stb_image.h"
+
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
 GLFWwindow *window;
@@ -72,6 +75,9 @@ void *uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
 
 VkDescriptorPool descriptorPool;
 VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
+
+VkImage textureImage;
+VkDeviceMemory textureImageMemory;
 
 typedef struct {
     vec2s pos;
@@ -912,7 +918,7 @@ uint32_t find_memory_type(uint32_t typeFiler, VkMemoryPropertyFlags properties) 
     printf("failed to find suitable memory type c:%d\n", __LINE__);
     return 0;
 }
-void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+VkCommandBuffer begin_single_time_command() {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -924,11 +930,9 @@ void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    VkBufferCopy copyRegion = {};
-    copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = 0;
-    copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    return commandBuffer;
+}
+void end_single_time_commands(VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -937,7 +941,13 @@ void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
     vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphicsQueue);
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-    return;
+}
+void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkBufferCopy copyRegion = {};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    end_single_time_commands(commandBuffer);
 }
 int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer,
                   VkDeviceMemory *buffermemory) {
@@ -963,6 +973,56 @@ int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyF
     }
     vkBindBufferMemory(device, *buffer, *buffermemory, 0);
     return 0;
+}
+
+void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkBufferImageCopy region = {};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = (VkOffset3D){0, 0, 0};
+    region.imageExtent = (VkExtent3D){width, height, 1};
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    end_single_time_commands(commandBuffer);
+}
+void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+    VkPipelineStageFlags sourceStage;
+    VkPipelineStageFlags destinationStage;
+    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkImageMemoryBarrier barrier = {};
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        printf("unsupported layout transition c:%d\n", __LINE__);
+    }
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    vkCmdPipelineBarrier(commandBuffer, 0, 0, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+    end_single_time_commands(commandBuffer);
 }
 int create_index_buffer() {
     VkDeviceSize bufferSize = sizeof(indices);
@@ -1012,6 +1072,70 @@ int create_uniform_buffers() {
     }
     return 0;
 }
+int create_image(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tilling, VkImageUsageFlags usage,
+                 VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory) {
+
+    VkImageCreateInfo imageInfo = {};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.flags = 0;
+    if (vkCreateImage(device, &imageInfo, NULL, &textureImage) != VK_SUCCESS) {
+        printf("vkCreateImage failed. c:%d\n", __LINE__);
+    }
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(device, textureImage, &memRequirements);
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (vkAllocateMemory(device, &allocInfo, NULL, &textureImageMemory) != VK_SUCCESS) {
+        printf("vkAllocateMemory failed. c:%d\n", __LINE__);
+        return 1;
+    }
+    vkBindImageMemory(device, textureImage, textureImageMemory, 0);
+    return 0;
+}
+int create_texture_image() {
+    int texWidth, texHeight, texChannels;
+    char imagePath[] = "./textures/donut.jpg";
+    stbi_uc *pixels = stbi_load(imagePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+    if (!pixels) {
+        printf("Failed to load image %s, c:%d\n", imagePath, __LINE__);
+        return 1;
+    }
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    create_buffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                  &stagingBuffer, &stagingBufferMemory);
+    void *data;
+    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, imageSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+    stbi_image_free(pixels);
+
+    create_image(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &textureImage,
+                 &textureImageMemory);
+    transitions_image_layout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copy_buffer_to_image(stagingBuffer, textureImage, texWidth, texHeight);
+    transitions_image_layout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vkDestroyBuffer(device, stagingBuffer, NULL);
+    vkFreeMemory(device, stagingBufferMemory, NULL);
+    return 0;
+}
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -1026,6 +1150,7 @@ int init_vulkan() {
     create_graphichs_pipeline();
     create_frame_buffers();
     create_command_pool();
+    create_texture_image();
     create_vertex_buffer();
     create_index_buffer();
     create_uniform_buffers();
@@ -1059,6 +1184,8 @@ int deinit_vulkan() {
     vkDestroyCommandPool(device, commandPool, NULL);
 
     cleanup_swap_chain();
+    vkDestroyImage(device, textureImage, NULL);
+    vkFreeMemory(device, textureImageMemory, NULL);
     vkDestroyDescriptorPool(device, descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
 
