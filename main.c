@@ -82,15 +82,20 @@ VkImageView textureImageView;
 VkSampler textureSampler;
 
 typedef struct {
-    vec2s pos;
+    vec3s pos;
     vec3s color;
     vec2s texCoord;
 } Vertex;
-Vertex vertices[] = {{.pos = {{-0.5f, -0.5f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
-                     {.pos = {{0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
-                     {.pos = {{0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}},
-                     {.pos = {{-0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}}};
-const uint16_t indices[] = {0, 1, 2, 2, 3, 0};
+Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
+                     {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
+                     {.pos = {{0.5f, 0.5f, 0.0f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
+                     {.pos = {{-0.5f, 0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 1.0f}}},
+
+                     {.pos = {{-0.5f, -0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 0.0f}}},
+                     {.pos = {{0.5f, -0.5f, 0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
+                     {.pos = {{0.5f, 0.5f, 0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
+                     {.pos = {{-0.5f, 0.5f, 0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
+const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
     VkVertexInputBindingDescription bindingDescription = {};
     bindingDescription.binding = 0;
@@ -104,7 +109,7 @@ int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescri
     }
     pAttributeDescriptions[0].binding = 0;
     pAttributeDescriptions[0].location = 0;
-    pAttributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    pAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     pAttributeDescriptions[0].offset = offsetof(Vertex, pos);
 
     pAttributeDescriptions[1].binding = 0;
