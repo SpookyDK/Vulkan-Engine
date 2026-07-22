@@ -11,8 +11,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #define CGLM_HEADER_ONLY
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define CGLM_FORCE_RADIANS
+#define CGLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE // For Vulkan
 #include "include/cglm/cglm.h"
 #include "include/cglm/struct.h"
@@ -85,9 +85,9 @@ VkImage depthImage;
 VkDeviceMemory depthImageMemory;
 VkImageView depthImageView;
 typedef struct {
-    vec3s pos;
-    vec3s color;
-    vec2s texCoord;
+    alignas(16) vec3s pos;
+    alignas(16) vec3s color;
+    alignas(16) vec2s texCoord;
 } Vertex;
 Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
                      {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
@@ -1059,7 +1059,7 @@ void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldL
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(commandBuffer, 0, 0, 0, 0, NULL, 0, NULL, 1, &barrier);
+    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
     end_single_time_commands(commandBuffer);
 }
@@ -1137,7 +1137,7 @@ int create_image(uint32_t width, uint32_t height, VkFormat format, VkImageTiling
     VkMemoryAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    allocInfo.memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, properties);
     if (vkAllocateMemory(device, &allocInfo, NULL, imageMemory) != VK_SUCCESS) {
         printf("vkAllocateMemory failed. c:%d\n", __LINE__);
         return 1;
@@ -1193,7 +1193,7 @@ int create_render_pass() {
     VkAttachmentDescription depthAttachment = {};
     depthAttachment.format = find_depth_format();
     depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1408,7 +1408,7 @@ void update_uniform_buffer(uint32_t currentImage) {
     float time = (float)glfwGetTime();
     glm_rotate(ubo.model, time * glm_rad(90.0f), (vec3){0.0f, 0.1f, 1.0f});
     glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
-    glm_perspective(glm_rad(45.0f), (float)swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f, ubo.proj);
+    glm_perspective_rh_zo(glm_rad(45.0f), (float)swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f, ubo.proj);
     ubo.proj[1][1] *= -1;
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -1457,7 +1457,7 @@ void draw_frame() {
 
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = NULL;
-    vkQueuePresentKHR(presentationQueue, &presentInfo);
+    result = vkQueuePresentKHR(presentationQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
