@@ -3,7 +3,7 @@
 set -e
 
 echo "==> Compiling main.c...."
-gcc main.c -o vulkan_test -lvulkan -lglfw -lm
+gcc main.c include/tiny_obj_c/tiny_obj_c.c include/tiny_obj_c/tobj_tess.c -DTOBJ_ENABLE_FILE_IO -Iinclude/tiny_obj_c -o vulkan_test -lvulkan -lglfw -lm
 echo "==> Compilation Successful!"
 
 

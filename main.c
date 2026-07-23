@@ -20,6 +20,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb_image.h"
 
+#define TINYOBJ_LOADER_C_IMPLEMENTATION
+#include "./include/tiny_obj_c/tiny_obj_c.h"
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
 GLFWwindow *window;
@@ -36,6 +38,9 @@ const bool enableValidationLayers = true;
 // #endif
 //
 //
+const char *ModelPath = "./models/viking_room_obj";
+const char *TexturePath = "./textures/viking_room.png";
+
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 VkDevice device = VK_NULL_HANDLE;
 VkQueue graphicsQueue = VK_NULL_HANDLE;
@@ -89,16 +94,21 @@ typedef struct {
     alignas(16) vec3s color;
     alignas(16) vec2s texCoord;
 } Vertex;
-Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
-                     {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
-                     {.pos = {{0.5f, 0.5f, 0.0f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
-                     {.pos = {{-0.5f, 0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 1.0f}}},
+// Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
+//                      {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
+//                      {.pos = {{0.5f, 0.5f, 0.0f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
+//                      {.pos = {{-0.5f, 0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 1.0f}}},
+//
+//                      {.pos = {{-0.5f, -0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 0.0f}}},
+//                      {.pos = {{0.5f, -0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
+//                      {.pos = {{0.5f, 0.5f, -0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
+//                      {.pos = {{-0.5f, 0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
+// const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
+Vertex *vertices;
+uint32_t vertexCount;
+uint32_t *indices;
+uint32_t indicesCount;
 
-                     {.pos = {{-0.5f, -0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 0.0f}}},
-                     {.pos = {{0.5f, -0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
-                     {.pos = {{0.5f, 0.5f, -0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
-                     {.pos = {{-0.5f, 0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
-const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
     VkVertexInputBindingDescription bindingDescription = {};
     bindingDescription.binding = 0;
@@ -889,7 +899,7 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
     vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
@@ -1236,11 +1246,10 @@ int create_render_pass() {
 }
 int create_texture_image() {
     int texWidth, texHeight, texChannels;
-    char imagePath[] = "./textures/donut.jpg";
-    stbi_uc *pixels = stbi_load(imagePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc *pixels = stbi_load(TexturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
     if (!pixels) {
-        printf("Failed to load image %s, c:%d\n", imagePath, __LINE__);
+        printf("Failed to load image %s, c:%d\n", TexturePath, __LINE__);
         return 1;
     }
     VkBuffer stagingBuffer;
@@ -1306,6 +1315,18 @@ int create_texture_sampler() {
     }
     return 0;
 }
+int load_model() {
+    // tobj_scene_f scene;
+    // tobj_load_config cfg = tobj_default_config();
+    // tobj_diag diag = {};
+    // if (tobj_load_obj_from_file_f(&scene, ModelPath, &cfg, &diag) != TOBJ_OK) {
+    //     printf("failed to load model, %s c:%d\n ", diag.err, __LINE__);
+    //     return 1;
+    // }
+
+    return 0;
+}
+
 int init_vulkan() {
     create_instance();
     create_surface();
@@ -1322,6 +1343,7 @@ int init_vulkan() {
     create_frame_buffers();
     create_command_pool();
     create_texture_image();
+    load_model();
     create_vertex_buffer();
     textureImageView = create_image_view(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     create_texture_image_view();

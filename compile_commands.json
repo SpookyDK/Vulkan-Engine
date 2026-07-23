@@ -1,0 +1,41 @@
+[
+  {
+    "file": "main.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "main.c",
+      "-DTOBJ_ENABLE_FILE_IO",
+      "-Iinclude/tiny_obj_c",
+      "-o",
+      "vulkan_test"
+    ],
+    "directory": "/home/esben/Programming/Vulkan-Tutorial-Engine",
+    "output": "vulkan_test"
+  },
+  {
+    "file": "include/tiny_obj_c/tiny_obj_c.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "include/tiny_obj_c/tiny_obj_c.c",
+      "-DTOBJ_ENABLE_FILE_IO",
+      "-Iinclude/tiny_obj_c",
+      "-o",
+      "vulkan_test"
+    ],
+    "directory": "/home/esben/Programming/Vulkan-Tutorial-Engine",
+    "output": "vulkan_test"
+  },
+  {
+    "file": "include/tiny_obj_c/tobj_tess.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "include/tiny_obj_c/tobj_tess.c",
+      "-DTOBJ_ENABLE_FILE_IO",
+      "-Iinclude/tiny_obj_c",
+      "-o",
+      "vulkan_test"
+    ],
+    "directory": "/home/esben/Programming/Vulkan-Tutorial-Engine",
+    "output": "vulkan_test"
+  }
+]
