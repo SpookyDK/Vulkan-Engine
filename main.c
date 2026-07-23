@@ -105,7 +105,7 @@ typedef struct {
 //                      {.pos = {{-0.5f, 0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
 // const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 Vertex *vertices;
-uint32_t vertexCount;
+uint32_t verticesCount;
 uint32_t *indices;
 uint32_t indicesCount;
 
@@ -902,7 +902,7 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
-    vkCmdDrawIndexed(commandBuffer, sizeof(indices) / sizeof(indices[0]), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, indicesCount, 1, 0, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
@@ -1074,7 +1074,7 @@ void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldL
     end_single_time_commands(commandBuffer);
 }
 int create_index_buffer() {
-    VkDeviceSize bufferSize = sizeof(indices);
+    VkDeviceSize bufferSize = indicesCount * sizeof(uint32_t);
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1093,7 +1093,7 @@ int create_index_buffer() {
     return 0;
 }
 int create_vertex_buffer() {
-    VkDeviceSize bufferSize = sizeof(vertices);
+    VkDeviceSize bufferSize = sizeof(Vertex) * verticesCount;
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1316,14 +1316,45 @@ int create_texture_sampler() {
     return 0;
 }
 int load_model() {
-    // tobj_scene_f scene;
-    // tobj_load_config cfg = tobj_default_config();
-    // tobj_diag diag = {};
-    // if (tobj_load_obj_from_file_f(&scene, ModelPath, &cfg, &diag) != TOBJ_OK) {
-    //     printf("failed to load model, %s c:%d\n ", diag.err, __LINE__);
-    //     return 1;
-    // }
+    tobj_scene_f scene;
+    tobj_load_config cfg = tobj_default_config();
+    tobj_diag diag = {};
+    if (tobj_load_obj_from_file_f(&scene, ModelPath, &cfg, &diag) != TOBJ_OK) {
+        printf("failed to load model, %s c:%d\n ", diag.err, __LINE__);
+        tobj_diag_free(&diag, NULL);
+        return 1;
+    }
+    indicesCount = 0;
+    for (int s = 0; s < scene.num_shapes; s++) {
+        indicesCount += scene.shapes[s].mesh.num_indices;
+    }
+    vertices = malloc(sizeof(Vertex) * indicesCount);
+    indices = malloc(sizeof(uint32_t) * indicesCount);
+    verticesCount = indicesCount;
 
+    if (!vertices || !indices) {
+        printf("failed to allocate memory c:%d\n", __LINE__);
+        tobj_diag_free(&diag, NULL);
+        tobj_scene_free_f(&scene);
+        return 1;
+    }
+    uint32_t currentCount = 0;
+    for (int s = 0; s < scene.num_shapes; s++) {
+        for (int i = 0; i < scene.shapes[s].mesh.num_indices; i++) {
+            tobj_index idx = scene.shapes[s].mesh.indices[i];
+            Vertex vertex = {};
+            vertex.pos = (vec3s){scene.attrib.vertices.ptr[3 * idx.vertex_index + 0], scene.attrib.vertices.ptr[3 * idx.vertex_index + 1],
+                                 scene.attrib.vertices.ptr[3 * idx.vertex_index + 2]};
+            vertex.texCoord = (vec2s){scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 0],
+                                      1.0f - scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 1]};
+            vertex.color = (vec3s){1.0f, 1.0f, 1.0f};
+            vertices[currentCount] = vertex;
+            indices[currentCount] = currentCount;
+            currentCount++;
+        }
+    }
+    tobj_scene_free_f(&scene);
+    tobj_diag_free(&diag, NULL);
     return 0;
 }
 
