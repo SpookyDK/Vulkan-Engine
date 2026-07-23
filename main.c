@@ -38,8 +38,8 @@ const bool enableValidationLayers = true;
 // #endif
 //
 //
-const char *ModelPath = "./models/viking_room_obj";
-const char *TexturePath = "./textures/viking_room.png";
+const char *ModelPath = "./models/donut.obj";
+const char *TexturePath = "./textures/donut.png";
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 VkDevice device = VK_NULL_HANDLE;
