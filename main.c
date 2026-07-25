@@ -40,7 +40,7 @@ VkInstance instance;
 
 // List of required Vulkan validation layers.
 const char *validationlayers[] = {"VK_LAYER_KHRONOS_validation"};
-const size_t validationLayerCount = 1;
+const uint32_t validationLayerCount = 1;
 // #ifdef NDEBUG
 // const bool enableValidationLayers = false;
 // #else
@@ -120,7 +120,8 @@ uint32_t verticesCount;
 uint32_t *indices;
 uint32_t indicesCount;
 
-VkVertexInputBindingDescription getBindingDescription(Vertex *vertices, uint32_t verticesCount) {
+VkVertexInputBindingDescription getBindingDescription(Vertex *_vertices,
+                                                      uint32_t _verticesCount) { // TODO should delete these params / make it premade struct
     VkVertexInputBindingDescription bindingDescription = {};
     bindingDescription.binding = 0;
     bindingDescription.stride = sizeof(Vertex);
@@ -214,9 +215,9 @@ bool check_validation_layer_support() {
     vkEnumerateInstanceLayerProperties(&layerCount, avaiableLayers);
 
     printf("Layercount is = %d", layerCount);
-    for (int i = 0; i < validationLayerCount; i++) {
+    for (uint32_t i = 0; i < validationLayerCount; i++) {
         bool layerFound = false;
-        for (int j = 0; j < layerCount; j++) {
+        for (uint32_t j = 0; j < layerCount; j++) {
             printf("%s\n", avaiableLayers[j].layerName);
             if (strcmp(validationlayers[i], avaiableLayers[j].layerName) == 0) {
                 layerFound = true;
@@ -229,7 +230,7 @@ bool check_validation_layer_support() {
     }
     return true;
 }
-static void framebufferResizedCallback(GLFWwindow *window, int width, int height) { framebufferResized = true; }
+static void framebufferResizedCallback(GLFWwindow *_window, int width, int height) { framebufferResized = true; }
 int init_window() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -261,6 +262,7 @@ int create_instance() {
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.enabledExtensionCount = glfwExtensionCount;
     instanceInfo.ppEnabledExtensionNames = glfwExtensions;
+    instanceInfo.pApplicationInfo = &appInfo;
     instanceInfo.enabledLayerCount = 0;
     if (enableValidationLayers && check_validation_layer_support()) {
         instanceInfo.enabledLayerCount = validationLayerCount;
@@ -338,41 +340,41 @@ typedef struct {
     int32_t graphicsFamily;
     int32_t presentaionFamily;
 } QueueFamiliyIndices;
-QueueFamiliyIndices find_queue_families(VkPhysicalDevice device) {
-    QueueFamiliyIndices indices;
-    indices.graphicsFamily = -1;
-    indices.presentaionFamily = -1;
+QueueFamiliyIndices find_queue_families(VkPhysicalDevice _device) {
+    QueueFamiliyIndices queueIndices;
+    queueIndices.graphicsFamily = -1;
+    queueIndices.presentaionFamily = -1;
 
     uint32_t queueFamiliyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(_device, &queueFamiliyCount, NULL);
     VkQueueFamilyProperties queueFamilies[queueFamiliyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiliyCount, queueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(_device, &queueFamiliyCount, queueFamilies);
     VkBool32 presentSupport = false;
-    for (int i = 0; i < queueFamiliyCount; i++) {
+    for (uint32_t i = 0; i < queueFamiliyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
+            queueIndices.graphicsFamily = i;
         }
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(_device, i, surface, &presentSupport);
         if (presentSupport) {
-            indices.presentaionFamily = i;
+            queueIndices.presentaionFamily = i;
         }
     }
-    return indices;
+    return queueIndices;
 }
 
 const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 const uint32_t requiredExtensionCount = 1;
-bool check_device_extension_support(VkPhysicalDevice device) {
+bool check_device_extension_support(VkPhysicalDevice _device) {
     uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
+    vkEnumerateDeviceExtensionProperties(_device, NULL, &extensionCount, NULL);
     VkExtensionProperties avaiableExtensions[extensionCount];
 
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, avaiableExtensions);
+    vkEnumerateDeviceExtensionProperties(_device, NULL, &extensionCount, avaiableExtensions);
     bool extensionsFound = true;
 
-    for (int i = 0; i < requiredExtensionCount; i++) {
+    for (uint32_t i = 0; i < requiredExtensionCount; i++) {
         extensionsFound = false;
-        for (int j = 0; j < extensionCount; j++) {
+        for (uint32_t j = 0; j < extensionCount; j++) {
             if (!strcmp(deviceExtensions[i], avaiableExtensions[j].extensionName)) {
                 extensionsFound = true;
                 break;
@@ -390,20 +392,20 @@ typedef struct {
     VkPresentModeKHR *presentModes;
 } SwapChainSupportDetails;
 
-SwapChainSupportDetails create_SwapChainSupportDetails(VkPhysicalDevice device) {
+SwapChainSupportDetails create_SwapChainSupportDetails(VkPhysicalDevice _device) {
     SwapChainSupportDetails details;
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details.formatCount, NULL);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_device, surface, &details.capabilities);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(_device, surface, &details.formatCount, NULL);
     if (details.formatCount != 0) {
         details.formats = malloc(details.formatCount * sizeof(VkSurfaceFormatKHR));
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details.formatCount, details.formats);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(_device, surface, &details.formatCount, details.formats);
     }
 
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.presentModeCount, NULL);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(_device, surface, &details.presentModeCount, NULL);
     if (details.presentModeCount != 0) {
         details.presentModes = malloc(details.presentModeCount * sizeof(VkPresentModeKHR));
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details.presentModeCount, details.presentModes);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(_device, surface, &details.presentModeCount, details.presentModes);
     }
     return details;
 }
@@ -413,7 +415,7 @@ void free_SwapChainSupportDetails(SwapChainSupportDetails details) {
     free(details.formats);
 }
 VkSurfaceFormatKHR choose_swap_surface_format(const SwapChainSupportDetails swapChainDetails) {
-    for (int i = 0; i < swapChainDetails.formatCount; i++) {
+    for (uint32_t i = 0; i < swapChainDetails.formatCount; i++) {
         if (swapChainDetails.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
             swapChainDetails.formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return swapChainDetails.formats[i];
@@ -422,7 +424,7 @@ VkSurfaceFormatKHR choose_swap_surface_format(const SwapChainSupportDetails swap
     return swapChainDetails.formats[0];
 }
 VkPresentModeKHR choost_swap_present_mode(const SwapChainSupportDetails swapChainDetails) {
-    for (int i = 0; i < swapChainDetails.presentModeCount; i++) {
+    for (uint32_t i = 0; i < swapChainDetails.presentModeCount; i++) {
         if (swapChainDetails.presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
             return swapChainDetails.presentModes[i];
         }
@@ -437,19 +439,19 @@ VkExtent2D choose_swap_extent(const SwapChainSupportDetails swapChainDetails) {
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
         VkExtent2D actualExtent = {(uint32_t)width, (uint32_t)height};
-        CLAMP_BETWEEN(actualExtent.width, swapChainDetails.capabilities.minImageExtent.width,
-                      swapChainDetails.capabilities.maxImageExtent.width);
-        CLAMP_BETWEEN(actualExtent.height, swapChainDetails.capabilities.minImageExtent.height,
-                      swapChainDetails.capabilities.maxImageExtent.height);
+        actualExtent.width = CLAMP_BETWEEN(actualExtent.width, swapChainDetails.capabilities.minImageExtent.width,
+                                           swapChainDetails.capabilities.maxImageExtent.width);
+        actualExtent.height = CLAMP_BETWEEN(actualExtent.height, swapChainDetails.capabilities.minImageExtent.height,
+                                            swapChainDetails.capabilities.maxImageExtent.height);
         return actualExtent;
     }
 }
-uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
+uint8_t evalute_vulkan_device(VkPhysicalDevice _device) {
     uint8_t score = 0;
     VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
+    vkGetPhysicalDeviceProperties(_device, &properties);
     VkPhysicalDeviceFeatures features;
-    vkGetPhysicalDeviceFeatures(device, &features);
+    vkGetPhysicalDeviceFeatures(_device, &features);
     printf("Evaluating %s \n", properties.deviceName);
     printf("DeviceType: %d ", properties.deviceType);
     switch (properties.deviceType) {
@@ -480,16 +482,16 @@ uint8_t evalute_vulkan_device(VkPhysicalDevice device) {
     if (!features.geometryShader)
         score = 0;
 
-    QueueFamiliyIndices indices = find_queue_families(device);
-    if (indices.graphicsFamily == -1) {
+    QueueFamiliyIndices queueIndices = find_queue_families(_device);
+    if (queueIndices.graphicsFamily == -1) {
         score = 0;
         return score;
     }
-    if (!check_device_extension_support(device)) {
+    if (!check_device_extension_support(_device)) {
         score = 0;
         return score;
     }
-    SwapChainSupportDetails swapChainSupport = create_SwapChainSupportDetails(device);
+    SwapChainSupportDetails swapChainSupport = create_SwapChainSupportDetails(_device);
     if (swapChainSupport.formatCount == 0 || swapChainSupport.presentModeCount == 0) {
         score = 0;
         return score;
@@ -510,7 +512,7 @@ int pick_physical_vkdevice() {
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
     uint8_t highScore = 0;
     int bestDevice = 0;
-    for (int i = 0; i < deviceCount; i++) {
+    for (uint32_t i = 0; i < deviceCount; i++) {
         uint8_t score = evalute_vulkan_device(devices[i]);
         if (highScore < score) {
             highScore = score;
@@ -527,9 +529,9 @@ int pick_physical_vkdevice() {
 // TODO Could be made more flexible, instead of hardcoded FAMILYCOUNT
 #define FAMILYCOUNT 2
 int create_logical_device() {
-    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
+    QueueFamiliyIndices queueIndices = find_queue_families(physicalDevice);
     VkDeviceQueueCreateInfo queueCreateInfo[FAMILYCOUNT] = {};
-    uint32_t uniqueQueues[FAMILYCOUNT] = {indices.graphicsFamily, indices.presentaionFamily};
+    uint32_t uniqueQueues[FAMILYCOUNT] = {queueIndices.graphicsFamily, queueIndices.presentaionFamily};
 
     float queuePriority = 1.0f;
     for (int i = 0; i < FAMILYCOUNT; i++) {
@@ -551,8 +553,8 @@ int create_logical_device() {
         printf("vkCreateDeviceInfo Failed line %d", __LINE__);
         return 1;
     }
-    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.presentaionFamily, 0, &presentationQueue);
+    vkGetDeviceQueue(device, queueIndices.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, queueIndices.presentaionFamily, 0, &presentationQueue);
     return 0;
 }
 
@@ -582,10 +584,10 @@ int create_swap_chain() {
     swapInfo.imageArrayLayers = 1;
     swapInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
-    uint32_t queueFamiliesIndices[] = {indices.graphicsFamily, indices.presentaionFamily};
+    QueueFamiliyIndices queueIndices = find_queue_families(physicalDevice);
+    uint32_t queueFamiliesIndices[] = {queueIndices.graphicsFamily, queueIndices.presentaionFamily};
 
-    if (indices.graphicsFamily != indices.presentaionFamily) {
+    if (queueIndices.graphicsFamily != queueIndices.presentaionFamily) {
         swapInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         swapInfo.queueFamilyIndexCount = 2;
         swapInfo.pQueueFamilyIndices = queueFamiliesIndices;
@@ -638,7 +640,7 @@ VkImageView create_image_view(VkImage image, VkFormat format, uint32_t mipLevels
 int create_swap_chain_image_views() {
     swapChainImageViewCount = swapChainImageCount;
     swapChainImageViews = malloc(swapChainImageViewCount * sizeof(VkImageView));
-    for (int i = 0; i < swapChainImageViewCount; i++) {
+    for (uint32_t i = 0; i < swapChainImageViewCount; i++) {
 
         swapChainImageViews[i] = create_image_view(swapChainImages[i], swapChainImageFormat, textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
         // VkImageViewCreateInfo createInfo = {};
@@ -723,7 +725,7 @@ int create_graphichs_pipeline() {
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-    VkViewport viewport = {};
+    VkViewport viewport = {0};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
     viewport.width = (float)swapChainExtent.width;
@@ -737,6 +739,8 @@ int create_graphichs_pipeline() {
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+    viewportState.pViewports = &viewport;
 
     VkPipelineRasterizationStateCreateInfo rasterizer = {};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -847,7 +851,7 @@ int create_frame_buffers() {
     swapChainFrameBufferCount = swapChainImageViewCount;
     swapChainFramebuffers = malloc(swapChainFrameBufferCount * sizeof(VkFramebuffer));
 
-    for (int i = 0; i < swapChainImageViewCount; i++) {
+    for (uint32_t i = 0; i < swapChainImageViewCount; i++) {
         VkImageView attachments[] = {swapChainImageViews[i], depthImageView};
 
         VkFramebufferCreateInfo framebufferInfo = {};
@@ -869,13 +873,13 @@ int create_frame_buffers() {
 }
 
 uint32_t currentFrame = 0;
-void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = 0;
     beginInfo.pInheritanceInfo = NULL;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    if (vkBeginCommandBuffer(_commandBuffer, &beginInfo) != VK_SUCCESS) {
         printf("vkBeginCommandBuffer failed. c:%d\n", __LINE__);
         return;
     }
@@ -887,13 +891,13 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     renderPassInfo.renderArea.extent = swapChainExtent;
 
     VkClearValue clearValues[2] = {};
-    clearValues[0].color = (VkClearColorValue){0.0f, 0.0f, 0.0f, 1.0f};
+    clearValues[0].color = (VkClearColorValue){{0.0f, 0.0f, 0.0f, 1.0f}};
     clearValues[1].depthStencil = (VkClearDepthStencilValue){1.0f, 0};
     renderPassInfo.clearValueCount = 2;
     renderPassInfo.pClearValues = clearValues;
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBeginRenderPass(_commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
@@ -902,31 +906,31 @@ void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     viewport.height = swapChainExtent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(_commandBuffer, 0, 1, &viewport);
     VkRect2D scissor = {};
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = swapChainExtent;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdSetScissor(_commandBuffer, 0, 1, &scissor);
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(_commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
-    vkCmdDrawIndexed(commandBuffer, indicesCount, 1, 0, 0, 0);
-    vkCmdEndRenderPass(commandBuffer);
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
+    vkCmdDrawIndexed(_commandBuffer, indicesCount, 1, 0, 0, 0);
+    vkCmdEndRenderPass(_commandBuffer);
+    if (vkEndCommandBuffer(_commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
     }
     return;
 }
 int create_command_pool() {
-    QueueFamiliyIndices indices = find_queue_families(physicalDevice);
+    QueueFamiliyIndices queueIndices = find_queue_families(physicalDevice);
 
     VkCommandPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = indices.graphicsFamily;
+    poolInfo.queueFamilyIndex = queueIndices.graphicsFamily;
 
     if (vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) != VK_SUCCESS) {
         printf("vkCreateCommandPool failed. c:%d\n", __LINE__);
@@ -970,7 +974,7 @@ int create_sync_objects() {
 uint32_t find_memory_type(uint32_t typeFiler, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-    for (int i = 0; i < memProperties.memoryTypeCount; i++) {
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
         if (typeFiler & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
             return i;
         }
@@ -984,30 +988,30 @@ VkCommandBuffer begin_single_time_command() {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandPool = commandPool;
     allocInfo.commandBufferCount = 1;
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+    VkCommandBuffer singleCommandBuffer;
+    vkAllocateCommandBuffers(device, &allocInfo, &singleCommandBuffer);
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    return commandBuffer;
+    vkBeginCommandBuffer(singleCommandBuffer, &beginInfo);
+    return singleCommandBuffer;
 }
-void end_single_time_commands(VkCommandBuffer commandBuffer) {
-    vkEndCommandBuffer(commandBuffer);
+void end_single_time_commands(VkCommandBuffer _commandBuffer) {
+    vkEndCommandBuffer(_commandBuffer);
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.pCommandBuffers = &_commandBuffer;
     vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphicsQueue);
-    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(device, commandPool, 1, &_commandBuffer);
 }
 void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkCommandBuffer copyCommandBuffer = begin_single_time_command();
     VkBufferCopy copyRegion = {};
     copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-    end_single_time_commands(commandBuffer);
+    vkCmdCopyBuffer(copyCommandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    end_single_time_commands(copyCommandBuffer);
 }
 int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer,
                   VkDeviceMemory *buffermemory) {
@@ -1018,7 +1022,7 @@ int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyF
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateBuffer(device, &bufferInfo, NULL, buffer) != VK_SUCCESS) {
-        printf("vkCreateBuffer failed size:%d, c:%d\n", size, __LINE__);
+        printf("vkCreateBuffer failed size:%ld, c:%d\n", size, __LINE__);
         return 1;
     }
     VkMemoryRequirements memRequirements;
@@ -1028,7 +1032,7 @@ int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyF
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, properties);
     if (vkAllocateMemory(device, &allocInfo, NULL, buffermemory) != VK_SUCCESS) {
-        printf("vkAllocateMemory failed size:%d, c:%d\n", memRequirements.size, __LINE__);
+        printf("vkAllocateMemory failed size:%ld, c:%d\n", memRequirements.size, __LINE__);
         return 1;
     }
     vkBindBufferMemory(device, *buffer, *buffermemory, 0);
@@ -1036,7 +1040,7 @@ int create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyF
 }
 
 void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkCommandBuffer copyImageCommandBuffer = begin_single_time_command();
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -1048,13 +1052,13 @@ void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32
     region.imageSubresource.layerCount = 1;
     region.imageOffset = (VkOffset3D){0, 0, 0};
     region.imageExtent = (VkExtent3D){width, height, 1};
-    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-    end_single_time_commands(commandBuffer);
+    vkCmdCopyBufferToImage(copyImageCommandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    end_single_time_commands(copyImageCommandBuffer);
 }
 void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
     VkPipelineStageFlags sourceStage;
     VkPipelineStageFlags destinationStage;
-    VkCommandBuffer commandBuffer = begin_single_time_command();
+    VkCommandBuffer transitionCommandBuffer = begin_single_time_command();
     VkImageMemoryBarrier barrier = {};
     if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
         barrier.srcAccessMask = 0;
@@ -1080,9 +1084,9 @@ void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldL
     barrier.subresourceRange.levelCount = mipLevels;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
+    vkCmdPipelineBarrier(transitionCommandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
-    end_single_time_commands(commandBuffer);
+    end_single_time_commands(transitionCommandBuffer);
 }
 int create_index_buffer() {
     VkDeviceSize bufferSize = indicesCount * sizeof(uint32_t);
@@ -1170,7 +1174,7 @@ int create_image(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat f
 VkFormat find_support_format(const VkFormat *candidates, uint32_t candidatesCount, VkImageTiling tiling, VkFormatFeatureFlags features) {
     if (candidates != NULL && candidatesCount != 0 && candidatesCount != 0) {
     }
-    for (int i = 0; i < candidatesCount; i++) {
+    for (uint32_t i = 0; i < candidatesCount; i++) {
         VkFormatProperties props;
         vkGetPhysicalDeviceFormatProperties(physicalDevice, candidates[i], &props);
         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
@@ -1194,6 +1198,7 @@ int create_depth_resources() {
         printf("is null\n");
     }
     depthImageView = create_image_view(depthImage, depthFormat, 1, VK_IMAGE_ASPECT_DEPTH_BIT);
+    return 0;
 }
 
 int create_render_pass() {
@@ -1338,7 +1343,7 @@ int load_model() {
         return 1;
     }
     indicesCount = 0;
-    for (int s = 0; s < scene.num_shapes; s++) {
+    for (uint32_t s = 0; s < scene.num_shapes; s++) {
         indicesCount += scene.shapes[s].mesh.num_indices;
     }
     vertices = malloc(sizeof(Vertex) * indicesCount);
@@ -1352,15 +1357,15 @@ int load_model() {
         return 1;
     }
     uint32_t currentCount = 0;
-    for (int s = 0; s < scene.num_shapes; s++) {
-        for (int i = 0; i < scene.shapes[s].mesh.num_indices; i++) {
+    for (uint32_t s = 0; s < scene.num_shapes; s++) {
+        for (uint32_t i = 0; i < scene.shapes[s].mesh.num_indices; i++) {
             tobj_index idx = scene.shapes[s].mesh.indices[i];
             Vertex vertex = {};
-            vertex.pos = (vec3s){scene.attrib.vertices.ptr[3 * idx.vertex_index + 0], scene.attrib.vertices.ptr[3 * idx.vertex_index + 1],
-                                 scene.attrib.vertices.ptr[3 * idx.vertex_index + 2]};
-            vertex.texCoord = (vec2s){scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 0],
-                                      1.0f - scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 1]};
-            vertex.color = (vec3s){1.0f, 1.0f, 1.0f};
+            vertex.pos = (vec3s){{scene.attrib.vertices.ptr[3 * idx.vertex_index + 0], scene.attrib.vertices.ptr[3 * idx.vertex_index + 1],
+                                  scene.attrib.vertices.ptr[3 * idx.vertex_index + 2]}};
+            vertex.texCoord = (vec2s){
+                {scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 0], 1.0f - scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 1]}};
+            vertex.color = (vec3s){{1.0f, 1.0f, 1.0f}};
             vertices[currentCount] = vertex;
             indices[currentCount] = currentCount;
             currentCount++;
@@ -1403,11 +1408,11 @@ int init_vulkan() {
 }
 
 void cleanup_swap_chain() {
-    for (int i = 0; i < swapChainFrameBufferCount; i++) {
+    for (uint32_t i = 0; i < swapChainFrameBufferCount; i++) {
         vkDestroyFramebuffer(device, swapChainFramebuffers[i], NULL);
     }
 
-    for (int i = 0; i < swapChainImageViewCount; i++) {
+    for (uint32_t i = 0; i < swapChainImageViewCount; i++) {
         vkDestroyImageView(device, swapChainImageViews[i], NULL);
     }
     vkDestroyImageView(device, depthImageView, NULL);
@@ -1419,7 +1424,7 @@ void cleanup_swap_chain() {
     free(swapChainFramebuffers);
 }
 int deinit_vulkan() {
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(device, imageAvaiableSemaphores[i], NULL);
         vkDestroySemaphore(device, renderFinishedSemaphores[i], NULL);
         vkDestroyFence(device, inFlightFence[i], NULL);
