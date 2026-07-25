@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vulkan/vulkan_core.h>
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
@@ -17,11 +18,20 @@
 #include "include/cglm/cglm.h"
 #include "include/cglm/struct.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
+#pragma GCC diagnostic ignored "-Wnull-dereference"
+#pragma GCC diagnostic ignored "-Wanalyzer-possible-null-dereference"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb_image.h"
 
 #define TINYOBJ_LOADER_C_IMPLEMENTATION
 #include "./include/tiny_obj_c/tiny_obj_c.h"
+#pragma GCC diagnostic pop
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
 GLFWwindow *window;
