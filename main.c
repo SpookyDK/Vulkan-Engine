@@ -563,6 +563,7 @@ int pick_physical_device() {
     tempDeviceAttributes.physicalDevice = devices[bestDevice];
     mydevice = tempDeviceAttributes;
     msaaSamples = get_max_usable_msaa_sample_count();
+    create_SwapChainSupportDetails(&mydevice);
     printf("MSAA = %dx\n", msaaSamples);
     return 0;
 }
@@ -608,6 +609,8 @@ int create_surface(VkSurfaceKHR *surface) {
 }
 
 int create_swap_chain(vkdevice_attributes_t *device_attributes) {
+    free_Swap_chain_support_details(device_attributes->swapChainSupportDetails);
+    create_SwapChainSupportDetails(device_attributes);
     VkSurfaceFormatKHR surfaceFormat = choose_swap_surface_format(device_attributes->swapChainSupportDetails);
     VkPresentModeKHR presentMode = choost_swap_present_mode(device_attributes->swapChainSupportDetails);
     VkExtent2D extent = choose_swap_extent(device_attributes->swapChainSupportDetails);
@@ -655,7 +658,7 @@ int create_swap_chain(vkdevice_attributes_t *device_attributes) {
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
-    free_Swap_chain_support_details(device_attributes->swapChainSupportDetails);
+    // free_Swap_chain_support_details(device_attributes->swapChainSupportDetails);
     return 0;
 }
 VkImageView create_image_view(VkImage image, VkFormat format, uint32_t mipLevels, VkImageAspectFlags aspectFlags) {
