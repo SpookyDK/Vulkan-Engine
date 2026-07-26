@@ -891,7 +891,7 @@ int create_graphichs_pipeline() {
 
     return 0;
 }
-
+// TODO: move all the buffers into a seperate memory structure
 int create_frame_buffers() {
     swapChainFrameBufferCount = swapChainImageViewCount;
     swapChainFramebuffers = malloc(swapChainFrameBufferCount * sizeof(VkFramebuffer));
@@ -1512,6 +1512,9 @@ int create_color_resources() {
     colorImageView = create_image_view(colorImage, colorFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 int init_vulkan() {
+    const char *extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    mydevice.pRequiredDeviceExtensions = extensions;
+    mydevice.requiredExtensionCount = 1;
     create_instance();
     create_surface(&mydevice.surface);
     pick_physical_device();

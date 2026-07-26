@@ -30,7 +30,8 @@ typedef struct {
     uint32_t queueFamilyIndicesCount;
     VkSurfaceKHR surface;
     SwapChainSupportDetails swapChainSupportDetails;
-
+    const char **pRequiredDeviceExtensions;
+    uint32_t requiredExtensionCount;
 } vkdevice_attributes_t;
 
 int find_queue_families(vkdevice_attributes_t *device_attribibutes);
