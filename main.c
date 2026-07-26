@@ -17,7 +17,7 @@
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE // For Vulkan
 #include "include/cglm/cglm.h"
 #include "include/cglm/struct.h"
-
+#include "include/my_vulkan/vulkan-device.h"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wextra"
@@ -441,7 +441,6 @@ SwapChainSupportDetails create_SwapChainSupportDetails(VkPhysicalDevice _device)
     }
     return details;
 }
-// TODO Ensure all the creations are freed after
 void free_SwapChainSupportDetails(SwapChainSupportDetails details) {
     free(details.presentModes);
     free(details.formats);
