@@ -9,7 +9,7 @@ ifeq ($(analyze),1)
     CFLAGS += -fanalyzer
 endif
 
-OBJS   := main.o tiny_obj_c.o tobj_tess.o
+OBJS   := main.o tiny_obj_c.o tobj_tess.o include/my_vulkan/vulkan-device.o
 TARGET := vulkan_test
 
 # Set the default target to show help + build
@@ -36,6 +36,9 @@ tobj_tess.o: include/tiny_obj_c/tobj_tess.c
 	@echo "==> Compiling tobj_tess.c..."
 	@$(CC) -c $< $(INCLUDES) -o $@
 
+include/my_vulkan/vulkan-device.o: include/my_vulkan/vulkan-device.c
+	@echo "==> Compiling vulkan-device.c..."
+	@$(CC) -c $< $(INCLUDES) $(DEFS) $(CFLAGS) -o $@
 # Quick Help Menu
 help:
 	@echo "---------------------------------------------------------"
