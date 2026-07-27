@@ -12,9 +12,16 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 
+const vec3 instanceOffsets[4] = vec3[4](
+    vec3(-0.5, -0.5, 0.0),
+    vec3( 0.5, -0.5, 0.0),
+    vec3(-0.5,  0.5, 0.0),
+    vec3( 0.5,  0.5, 0.0)
+);
 
 void main(){
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition,1.0);
+    vec3 pos = inPosition + instanceOffsets[gl_InstanceIndex];
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos,1.0);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }

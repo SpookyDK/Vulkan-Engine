@@ -962,7 +962,7 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     vkCmdBindIndexBuffer(_commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
-    vkCmdDrawIndexed(_commandBuffer, indicesCount, 1, 0, 0, 0);
+    vkCmdDrawIndexed(_commandBuffer, indicesCount, 4, 0, 0, 0);
     vkCmdEndRenderPass(_commandBuffer);
     if (vkEndCommandBuffer(_commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
