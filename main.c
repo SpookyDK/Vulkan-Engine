@@ -52,6 +52,8 @@ const bool enableValidationLayers = true;
 const char *ModelPath = "./models/viking_room_obj";
 const char *TexturePath = "./textures/viking_room.png";
 
+const char *DonutPath = "./models/viking_room_obj";
+const char *DonutTexPath = "./textures/viking_room.png";
 // VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 // VkDevice device = VK_NULL_HANDLE;
 // VkQueue graphicsQueue = VK_NULL_HANDLE;
@@ -83,6 +85,22 @@ VkBuffer vertexBuffer;
 VkDeviceMemory vertexBufferMemory;
 VkBuffer indexBuffer;
 VkDeviceMemory indexBufferMemory;
+
+typedef struct {
+    mat4 transform;
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
+} Object_3d_t;
+
+typedef struct {
+    uint32_t bufferCount;
+    VkBuffer *pBuffers;
+    VkDeviceMemory *pMemory;
+    void **pUniformBuffersMapped;
+
+} uniformBuffer_t;
 
 VkBuffer uniformBuffers[MAX_FRAMES_IN_FLIGHT];
 VkDeviceMemory uniformBuffersMemory[MAX_FRAMES_IN_FLIGHT];
