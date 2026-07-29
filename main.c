@@ -1,6 +1,7 @@
 // This is my attempt at learning to draw a triangle in vulkan over the summer holidays
 // Using the superior language of C over C++bloat
 //
+// TODO change functions to use object_t references.
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1169,6 +1170,10 @@ int create_index_buffer() {
 
     return 0;
 }
+/** Creates the vertex buffesr for a given object.
+ * TODO Change this to take a model input and fillout the params inside it.
+ *
+ */
 int create_vertex_buffer() {
     VkDeviceSize bufferSize = sizeof(Vertex) * verticesCount;
     VkBuffer stagingBuffer;
@@ -1402,6 +1407,11 @@ int generate_mipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int3
     end_single_time_commands(mipmapCommandBuffer);
     return 0;
 }
+/** Loads a textures using stbi_image and allocs it, creating mipmaps and such
+ * TODO Change to return some sort of texture descriptioon that can be pointed to by vertex objects.
+ *
+ *
+ */
 int create_texture_image() {
     int texWidth, texHeight, texChannels;
     stbi_uc *pixels = stbi_load(TexturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1479,6 +1489,10 @@ int create_texture_sampler() {
     }
     return 0;
 }
+/**Just loads the model into a vertices buffer and indices buffer.
+ *TODO Change load model to take model struct as input.
+ *
+ */
 int load_model() {
     tobj_scene_f scene;
     tobj_load_config cfg = tobj_default_config();
