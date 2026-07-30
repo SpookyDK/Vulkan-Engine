@@ -82,10 +82,10 @@ VkSemaphore renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
 VkFence inFlightFence[MAX_FRAMES_IN_FLIGHT];
 bool framebufferResized = false;
 
-VkBuffer vertexBuffer;
-VkDeviceMemory vertexBufferMemory;
-VkBuffer indexBuffer;
-VkDeviceMemory indexBufferMemory;
+// VkBuffer vertexBuffer;
+// VkDeviceMemory vertexBufferMemory;
+// VkBuffer indexBuffer;
+// VkDeviceMemory indexBufferMemory;
 
 typedef struct {
     mat4 transform;
@@ -419,10 +419,8 @@ void create_descriptor_sets() {
 //      uint32_t extensionCount;
 //      vkEnumerateDeviceExtensionProperties(_device, NULL, &extensionCount, NULL);
 //      VkExtensionProperties avaiableExtensions[extensionCount];
-//
 //      vkEnumerateDeviceExtensionProperties(_device, NULL, &extensionCount, avaiableExtensions);
 //      bool extensionsFound = true;
-//
 //      for (uint32_t i = 0; i < requiredExtensionCount; i++) {
 //          extensionsFound = false;
 //          for (uint32_t j = 0; j < extensionCount; j++) {
@@ -443,10 +441,8 @@ void create_descriptor_sets() {
 //      uint32_t presentModeCount;
 //      VkPresentModeKHR *presentModes;
 //  } SwapChainSupportDetails;
-
 // SwapChainSupportDetails create_SwapChainSupportDetails(VkPhysicalDevice _device) {
 //     SwapChainSupportDetails details;
-//
 //     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_device, surface, &details.capabilities);
 //     vkGetPhysicalDeviceSurfaceFormatsKHR(_device, surface, &details.formatCount, NULL);
 //     if (details.formatCount != 0) {
@@ -937,6 +933,7 @@ int create_frame_buffers() {
 }
 
 uint32_t currentFrame = 0;
+Object_3d_t test_object;
 void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -975,10 +972,10 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(_commandBuffer, 0, 1, &scissor);
-    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkBuffer vertexBuffers[] = {test_object.vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(_commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(_commandBuffer, test_object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
     vkCmdDrawIndexed(_commandBuffer, indicesCount, 4, 0, 0, 0);
@@ -1163,8 +1160,8 @@ int create_index_buffer() {
     memcpy(data, indices, bufferSize);
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  &indexBuffer, &indexBufferMemory);
-    copy_buffer(stagingBuffer, indexBuffer, bufferSize);
+                  &test_object.indexBuffer, &test_object.indexBufferMemory);
+    copy_buffer(stagingBuffer, test_object.indexBuffer, bufferSize);
     vkDestroyBuffer(mydevice.device, stagingBuffer, NULL);
     vkFreeMemory(mydevice.device, stagingBufferMemory, NULL);
 
@@ -1186,8 +1183,8 @@ int create_vertex_buffer() {
     memcpy(data, vertices, bufferSize);
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  &vertexBuffer, &vertexBufferMemory);
-    copy_buffer(stagingBuffer, vertexBuffer, bufferSize);
+                  &test_object.vertexBuffer, &test_object.vertexBufferMemory);
+    copy_buffer(stagingBuffer, test_object.vertexBuffer, bufferSize);
     vkDestroyBuffer(mydevice.device, stagingBuffer, NULL);
     vkFreeMemory(mydevice.device, stagingBufferMemory, NULL);
 
@@ -1615,10 +1612,10 @@ int deinit_vulkan() {
         vkDestroyBuffer(mydevice.device, uniformBuffers[i], NULL);
         vkFreeMemory(mydevice.device, uniformBuffersMemory[i], NULL);
     }
-    vkDestroyBuffer(mydevice.device, indexBuffer, NULL);
-    vkFreeMemory(mydevice.device, indexBufferMemory, NULL);
-    vkDestroyBuffer(mydevice.device, vertexBuffer, NULL);
-    vkFreeMemory(mydevice.device, vertexBufferMemory, NULL);
+    vkDestroyBuffer(mydevice.device, test_object.indexBuffer, NULL);
+    vkFreeMemory(mydevice.device, test_object.indexBufferMemory, NULL);
+    vkDestroyBuffer(mydevice.device, test_object.vertexBuffer, NULL);
+    vkFreeMemory(mydevice.device, test_object.vertexBufferMemory, NULL);
     vkDestroyPipeline(mydevice.device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(mydevice.device, pipelineLayout, NULL);
     vkDestroyRenderPass(mydevice.device, renderpass, NULL);
