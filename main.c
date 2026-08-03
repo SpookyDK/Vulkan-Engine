@@ -94,7 +94,7 @@ typedef struct {
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
 } Object_3d_t;
-
+Object_3d_t test_object;
 typedef struct {
     uint32_t bufferCount;
     VkBuffer *pBuffers;
@@ -176,7 +176,7 @@ int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescri
 }
 
 typedef struct {
-    mat4 model;
+    mat4 model_transform;
     mat4 view;
     mat4 proj;
 } UniformBufferObject;
@@ -933,7 +933,6 @@ int create_frame_buffers() {
 }
 
 uint32_t currentFrame = 0;
-Object_3d_t test_object;
 void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -972,7 +971,8 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(_commandBuffer, 0, 1, &scissor);
-    VkBuffer vertexBuffers[] = {test_object.vertexBuffer};
+    VkBuffer vertexBuffers[] = {
+        test_object.vertexBuffer}; // TODO should be object count or something like that with a loop that adds each object vertexBuffer
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(_commandBuffer, test_object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
@@ -1643,11 +1643,12 @@ void recreate_swap_chain() {
     create_frame_buffers();
 }
 
+// TODO This should be changed to some sort of rotate function, not and update_uniform_buffer
 void update_uniform_buffer(uint32_t currentImage) {
     UniformBufferObject ubo = {};
-    glm_mat4_identity(ubo.model);
+    glm_mat4_identity(ubo.model_transform);
     float time = (float)glfwGetTime();
-    glm_rotate(ubo.model, time * glm_rad(90.0f), (vec3){0.0f, 0.1f, 1.0f});
+    glm_rotate(ubo.model_transform, time * glm_rad(90.0f), (vec3){0.0f, 0.1f, 1.0f});
     glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
     glm_perspective_rh_zo(glm_rad(45.0f), (float)swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f, ubo.proj);
     ubo.proj[1][1] *= -1;
