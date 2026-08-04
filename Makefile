@@ -1,6 +1,6 @@
 CC       := gcc
 CFLAGS   := -Wall -Wextra -Wshadow -Wdouble-promotion -Wnull-dereference -Wstack-usage=2048 -g
-INCLUDES := -isystem include/tiny_obj_c -isystem include
+INCLUDES := -isystem include/tiny_obj_c -isystem include/tiny_gltf -isystem include
 DEFS     := -DTOBJ_ENABLE_FILE_IO
 LIBS     := -lvulkan -lglfw -lm
 
@@ -9,7 +9,7 @@ ifeq ($(analyze),1)
     CFLAGS += -fanalyzer
 endif
 
-OBJS   := main.o tiny_obj_c.o tobj_tess.o include/my_vulkan/vulkan-device.o
+OBJS   := main.o tiny_obj_c.o tobj_tess.o tiny_gltf_v3.o  include/my_vulkan/vulkan-device.o
 TARGET := vulkan_test
 
 # Set the default target to show help + build
@@ -34,6 +34,10 @@ tiny_obj_c.o: include/tiny_obj_c/tiny_obj_c.c
 
 tobj_tess.o: include/tiny_obj_c/tobj_tess.c
 	@echo "==> Compiling tobj_tess.c..."
+	@$(CC) -c $< $(INCLUDES) -o $@
+
+tiny_gltf_v3.o: include/tiny_gltf/tiny_gltf_v3.c
+	@echo "==> Compiling tiny_gltf.c..."
 	@$(CC) -c $< $(INCLUDES) -o $@
 
 include/my_vulkan/vulkan-device.o: include/my_vulkan/vulkan-device.c

@@ -1,7 +1,6 @@
 // This is my attempt at learning to draw a triangle in vulkan over the summer holidays
 // Using the superior language of C over C++bloat
 //
-// TODO change functions to use object_t references.
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -31,6 +30,7 @@
 #include "include/stb_image.h"
 
 #define TINYOBJ_LOADER_C_IMPLEMENTATION
+#include "./include/tiny_gltf/tiny_gltf_v3.h"
 #include "./include/tiny_obj_c/tiny_obj_c.h"
 #pragma GCC diagnostic pop
 #define WINDOW_WIDTH 800
@@ -88,11 +88,29 @@ bool framebufferResized = false;
 // VkDeviceMemory indexBufferMemory;
 
 typedef struct {
+    uint32_t textureMipLevels;
+    VkImage textureImage;
+    VkDeviceMemory textureImageMemory;
+    VkImageView textureImageView;
+    VkSampler textureSampler;
+} texture_t;
+typedef struct {
+    alignas(16) vec3s pos;
+    alignas(16) vec3s color;
+    alignas(16) vec2s texCoord;
+} Vertex;
+typedef struct {
     mat4 transform;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    Vertex *vertices;
+    uint32_t verticesCount;
+    uint32_t *indices;
+    uint32_t indicesCount;
+    texture_t *textures;
+    uint32_t textureCount;
 } Object_3d_t;
 Object_3d_t test_object;
 typedef struct {
@@ -110,12 +128,6 @@ void *uniformBuffersMapped[MAX_FRAMES_IN_FLIGHT];
 VkDescriptorPool descriptorPool;
 VkDescriptorSet descriptorSets[MAX_FRAMES_IN_FLIGHT];
 
-uint32_t textureMipLevels;
-VkImage textureImage;
-VkDeviceMemory textureImageMemory;
-VkImageView textureImageView;
-VkSampler textureSampler;
-
 VkImage colorImage;
 VkDeviceMemory colorImageMemory;
 VkImageView colorImageView;
@@ -125,11 +137,6 @@ VkDeviceMemory depthImageMemory;
 VkImageView depthImageView;
 
 VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-typedef struct {
-    alignas(16) vec3s pos;
-    alignas(16) vec3s color;
-    alignas(16) vec2s texCoord;
-} Vertex;
 // Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
 //                      {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
 //                      {.pos = {{0.5f, 0.5f, 0.0f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
@@ -140,10 +147,10 @@ typedef struct {
 //                      {.pos = {{0.5f, 0.5f, -0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
 //                      {.pos = {{-0.5f, 0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
 // const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
-Vertex *vertices;
-uint32_t verticesCount;
-uint32_t *indices;
-uint32_t indicesCount;
+// Vertex *vertices;
+// uint32_t verticesCount;
+// uint32_t *indices;
+// uint32_t indicesCount;
 
 VkVertexInputBindingDescription getBindingDescription(Vertex *_vertices,
                                                       uint32_t _verticesCount) { // TODO should delete these params / make it premade struct
@@ -341,7 +348,8 @@ void create_descriptor_pool() {
         printf("vkCreateDescriptorPool failed c:%d\n", __LINE__);
     }
 }
-void create_descriptor_sets() {
+// Descriptor is a way to tell the gpu about resources is my understanding
+void create_descriptor_sets(texture_t *texture) {
     VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = {descriptorSetLayout, descriptorSetLayout};
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -359,8 +367,8 @@ void create_descriptor_sets() {
         bufferInfo.range = sizeof(UniformBufferObject);
         VkDescriptorImageInfo imageInfo = {};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImageView;
-        imageInfo.sampler = textureSampler;
+        imageInfo.imageView = texture->textureImageView;
+        imageInfo.sampler = texture->textureSampler;
 
         VkWriteDescriptorSet descriptorWrites[2] = {};
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -768,7 +776,7 @@ int create_graphichs_pipeline() {
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates = dynamicStates;
 
-    VkVertexInputBindingDescription bindingDescription = getBindingDescription(vertices, 3);
+    VkVertexInputBindingDescription bindingDescription = getBindingDescription(test_object.vertices, 3);
     uint32_t AttributeDescriptionCount = 3;
     VkVertexInputAttributeDescription AttributeDescriptions[AttributeDescriptionCount];
     getAttributeDescriptions(AttributeDescriptions, &AttributeDescriptionCount);
@@ -978,7 +986,7 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     vkCmdBindIndexBuffer(_commandBuffer, test_object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
-    vkCmdDrawIndexed(_commandBuffer, indicesCount, 4, 0, 0, 0);
+    vkCmdDrawIndexed(_commandBuffer, test_object.indicesCount, 4, 0, 0, 0);
     vkCmdEndRenderPass(_commandBuffer);
     if (vkEndCommandBuffer(_commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
@@ -1148,8 +1156,9 @@ void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldL
 
     end_single_time_commands(transitionCommandBuffer);
 }
+// TODO change this to take an object instead
 int create_index_buffer() {
-    VkDeviceSize bufferSize = indicesCount * sizeof(uint32_t);
+    VkDeviceSize bufferSize = test_object.indicesCount * sizeof(uint32_t);
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1157,7 +1166,7 @@ int create_index_buffer() {
 
     void *data;
     vkMapMemory(mydevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices, bufferSize);
+    memcpy(data, test_object.indices, bufferSize);
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                   &test_object.indexBuffer, &test_object.indexBufferMemory);
@@ -1171,20 +1180,20 @@ int create_index_buffer() {
  * TODO Change this to take a model input and fillout the params inside it.
  *
  */
-int create_vertex_buffer() {
-    VkDeviceSize bufferSize = sizeof(Vertex) * verticesCount;
+int create_vertex_buffer(Object_3d_t *object) {
+    VkDeviceSize bufferSize = sizeof(Vertex) * test_object.verticesCount;
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                   &stagingBuffer, &stagingBufferMemory);
 
-    void *data;
+    void *data; // TODO coulnt this not just be mapped directly, we dont need the model stored on the cpu right?
     vkMapMemory(mydevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices, bufferSize);
+    memcpy(data, object->vertices, bufferSize);
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  &test_object.vertexBuffer, &test_object.vertexBufferMemory);
-    copy_buffer(stagingBuffer, test_object.vertexBuffer, bufferSize);
+                  &object->vertexBuffer, &object->vertexBufferMemory);
+    copy_buffer(stagingBuffer, object->vertexBuffer, bufferSize);
     vkDestroyBuffer(mydevice.device, stagingBuffer, NULL);
     vkFreeMemory(mydevice.device, stagingBufferMemory, NULL);
 
@@ -1409,12 +1418,12 @@ int generate_mipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int3
  *
  *
  */
-int create_texture_image() {
+int load_texture_image(const char *TexturePath, texture_t *texture) {
     int texWidth, texHeight, texChannels;
     stbi_uc *pixels = stbi_load(TexturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
-    textureMipLevels = (uint32_t)floor(log2(texWidth > texHeight ? texWidth : texHeight)) + 1;
-    printf("create texture with %d mip levels c:%d\n", textureMipLevels, __LINE__);
+    texture->textureMipLevels = (uint32_t)floor(log2(texWidth > texHeight ? texWidth : texHeight)) + 1;
+    printf("create texture with %d mip levels c:%d\n", texture->textureMipLevels, __LINE__);
     if (!pixels) {
         printf("Failed to load image %s, c:%d\n", TexturePath, __LINE__);
         return 1;
@@ -1429,37 +1438,37 @@ int create_texture_image() {
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     stbi_image_free(pixels);
 
-    create_image(texWidth, texHeight, textureMipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+    create_image(texWidth, texHeight, texture->textureMipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &textureImage, &textureImageMemory);
-    transitions_image_layout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             textureMipLevels);
-    copy_buffer_to_image(stagingBuffer, textureImage, texWidth, texHeight);
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &texture->textureImage, &texture->textureImageMemory);
+    transitions_image_layout(texture->textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->textureMipLevels);
+    copy_buffer_to_image(stagingBuffer, texture->textureImage, texWidth, texHeight);
     // transitions_image_layout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     //                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, textureMipLevels);
 
-    generate_mipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, textureMipLevels);
+    generate_mipmaps(texture->textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, texture->textureMipLevels);
     vkDestroyBuffer(mydevice.device, stagingBuffer, NULL);
     vkFreeMemory(mydevice.device, stagingBufferMemory, NULL);
     return 0;
 }
-int create_texture_image_view() {
-    VkImageViewCreateInfo viewInfo = {};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = textureImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = textureMipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(mydevice.device, &viewInfo, NULL, &textureImageView) != VK_SUCCESS) {
-        printf("vkCreateImageView failed. c:%d\n", __LINE__);
-    }
-    return 0;
-}
-int create_texture_sampler() {
+// int create_texture_image_view() {
+//     VkImageViewCreateInfo viewInfo = {};
+//     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+//     viewInfo.image = textureImage;
+//     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+//     viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+//     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//     viewInfo.subresourceRange.baseMipLevel = 0;
+//     viewInfo.subresourceRange.levelCount = textureMipLevels;
+//     viewInfo.subresourceRange.baseArrayLayer = 0;
+//     viewInfo.subresourceRange.layerCount = 1;
+//     if (vkCreateImageView(mydevice.device, &viewInfo, NULL, &textureImageView) != VK_SUCCESS) {
+//         printf("vkCreateImageView failed. c:%d\n", __LINE__);
+//     }
+//     return 0;
+// }
+int create_texture_sampler(texture_t *texture) {
     VkSamplerCreateInfo samplerInfo = {};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -1480,7 +1489,7 @@ int create_texture_sampler() {
     samplerInfo.minLod = 1.0f;
     samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
     ;
-    if (vkCreateSampler(mydevice.device, &samplerInfo, NULL, &textureSampler) != VK_SUCCESS) {
+    if (vkCreateSampler(mydevice.device, &samplerInfo, NULL, &texture->textureSampler) != VK_SUCCESS) {
         printf("vkCreateSampler failed. c:%d\n", __LINE__);
         return 1;
     }
@@ -1490,7 +1499,7 @@ int create_texture_sampler() {
  *TODO Change load model to take model struct as input.
  *
  */
-int load_model() {
+static int load_obj_file(const char *ModelPath, Object_3d_t *object_out) {
     tobj_scene_f scene;
     tobj_load_config cfg = tobj_default_config();
     tobj_diag diag = {};
@@ -1499,15 +1508,15 @@ int load_model() {
         tobj_diag_free(&diag, NULL);
         return 1;
     }
-    indicesCount = 0;
+    object_out->indicesCount = 0;
     for (uint32_t s = 0; s < scene.num_shapes; s++) {
-        indicesCount += scene.shapes[s].mesh.num_indices;
+        object_out->indicesCount += scene.shapes[s].mesh.num_indices;
     }
-    vertices = malloc(sizeof(Vertex) * indicesCount);
-    indices = malloc(sizeof(uint32_t) * indicesCount);
-    verticesCount = indicesCount;
+    object_out->vertices = malloc(sizeof(Vertex) * object_out->indicesCount);
+    object_out->indices = malloc(sizeof(uint32_t) * object_out->indicesCount);
+    object_out->verticesCount = object_out->indicesCount;
 
-    if (!vertices || !indices) {
+    if (object_out->vertices == NULL || object_out->indices == NULL) {
         printf("failed to allocate memory c:%d\n", __LINE__);
         tobj_diag_free(&diag, NULL);
         tobj_scene_free_f(&scene);
@@ -1523,13 +1532,28 @@ int load_model() {
             vertex.texCoord = (vec2s){
                 {scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 0], 1.0f - scene.attrib.texcoords.ptr[2 * idx.texcoord_index + 1]}};
             vertex.color = (vec3s){{1.0f, 1.0f, 1.0f}};
-            vertices[currentCount] = vertex;
-            indices[currentCount] = currentCount;
+            object_out->vertices[currentCount] = vertex;
+            object_out->indices[currentCount] = currentCount;
             currentCount++;
         }
     }
     tobj_scene_free_f(&scene);
     tobj_diag_free(&diag, NULL);
+    return 0;
+}
+int upload_model(Object_3d_t *object) {
+    create_vertex_buffer(object);
+    // create_image_view();
+    create_texture_sampler(&object->textures[0]);
+    create_index_buffer();
+    create_uniform_buffers(); // TODO make this a specific one for transform
+    return 0;
+}
+int load_model(const char *ModelPath, Object_3d_t *object_out) {
+    if (load_obj_file(ModelPath, object_out) != 0) {
+        printf("failed to load obj model\n");
+        return 1;
+    }
     return 0;
 }
 
@@ -1557,15 +1581,18 @@ int init_vulkan() {
     create_depth_resources();
     create_frame_buffers();
     create_command_pool(&mydevice);
-    create_texture_image();
-    load_model();
-    create_vertex_buffer();
-    textureImageView = create_image_view(textureImage, VK_FORMAT_R8G8B8A8_SRGB, textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
-    create_texture_sampler();
+    load_model(ModelPath, &test_object);
+    test_object.textures = malloc(sizeof(texture_t));
+    load_texture_image(TexturePath, &test_object.textures[0]);
+    test_object.textureCount += 1;
+    upload_model(&test_object);
+    // create_vertex_buffer();
+    test_object.textures[0].textureImageView = create_image_view(test_object.textures[0].textureImage, VK_FORMAT_R8G8B8A8_SRGB,
+                                                                 test_object.textures[0].textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
     create_index_buffer();
     create_uniform_buffers();
     create_descriptor_pool();
-    create_descriptor_sets();
+    create_descriptor_sets(&test_object.textures[0]);
     create_command_buffer();
     create_sync_objects();
 
@@ -1601,10 +1628,10 @@ int deinit_vulkan() {
     vkDestroyCommandPool(mydevice.device, commandPool, NULL);
 
     cleanup_swap_chain();
-    vkDestroySampler(mydevice.device, textureSampler, NULL);
-    vkDestroyImageView(mydevice.device, textureImageView, NULL);
-    vkDestroyImage(mydevice.device, textureImage, NULL);
-    vkFreeMemory(mydevice.device, textureImageMemory, NULL);
+    vkDestroySampler(mydevice.device, test_object.textures[0].textureSampler, NULL);
+    vkDestroyImageView(mydevice.device, test_object.textures[0].textureImageView, NULL);
+    vkDestroyImage(mydevice.device, test_object.textures[0].textureImage, NULL);
+    vkFreeMemory(mydevice.device, test_object.textures[0].textureImageMemory, NULL);
     vkDestroyDescriptorPool(mydevice.device, descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(mydevice.device, descriptorSetLayout, NULL);
 
