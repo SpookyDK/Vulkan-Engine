@@ -111,6 +111,7 @@ typedef struct {
     uint32_t indicesCount;
     texture_t *textures;
     uint32_t textureCount;
+    uint64_t ID;
 } Object_3d_t;
 Object_3d_t test_object;
 typedef struct {
@@ -332,6 +333,9 @@ int create_instance() {
     }
     return 0;
 }
+// makes the descriptor pool, which is where descriptor sets are stored.
+// therefore we make it a poolsize of 2 becuase we have 2 descriptors in the next function
+// TODO Want to comebine this a bit with the next function
 void create_descriptor_pool() {
     VkDescriptorPoolSize poolSizes[2] = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -360,17 +364,24 @@ void create_descriptor_sets(texture_t *texture) {
         printf("vkAllocateDescriptorSets failed. c:%d\n", __LINE__);
         return;
     }
+    // We make a description for each frame in flight, so we can change each on the fly
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        // Bufferinfo here is used because it is a generaric buffer.
         VkDescriptorBufferInfo bufferInfo = {};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
         VkDescriptorImageInfo imageInfo = {};
+        // Here we use image because what we are uploading is an image.
+        // I need one of these for each image/texture i want to transfer to the gpu.
+        // If they arent changing i could just use 1 for a texture not one for each frame in flight
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = texture->textureImageView;
         imageInfo.sampler = texture->textureSampler;
 
+        // Here we make some descriptorWrites to descripe how we will make descriptors
         VkWriteDescriptorSet descriptorWrites[2] = {};
+        // One for the buffer
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
         descriptorWrites[0].dstBinding = 0;
@@ -381,6 +392,8 @@ void create_descriptor_sets(texture_t *texture) {
         descriptorWrites[0].pImageInfo = NULL;
         descriptorWrites[0].pTexelBufferView = NULL;
 
+        // One for the texture.  Need one of these for each.
+        // These steps should maybe just be made a function
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets[i];
         descriptorWrites[1].dstBinding = 1;
@@ -389,6 +402,7 @@ void create_descriptor_sets(texture_t *texture) {
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pBufferInfo = NULL;
         descriptorWrites[1].pImageInfo = &imageInfo;
+        // We update the descriptor sets on the given device.  think this overwrites all previous ones
         vkUpdateDescriptorSets(mydevice.device, 2, descriptorWrites, 0, NULL);
     }
 }
