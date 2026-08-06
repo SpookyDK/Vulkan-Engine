@@ -50,8 +50,8 @@ const bool enableValidationLayers = true;
 // #endif
 //
 //
-const char *ModelPath = "./models/viking_room_obj";
-const char *TexturePath = "./textures/viking_room.png";
+const char *VikingPath = "./models/viking_room_obj";
+const char *VikingTexturePath = "./textures/viking_room.png";
 
 const char *DonutPath = "./models/viking_room_obj";
 const char *DonutTexPath = "./textures/viking_room.png";
@@ -113,7 +113,8 @@ typedef struct {
     uint32_t textureCount;
     uint64_t ID;
 } Object_3d_t;
-Object_3d_t test_object;
+Object_3d_t vikingObject;
+Object_3d_t donutObject;
 typedef struct {
     uint32_t bufferCount;
     VkBuffer *pBuffers;
@@ -790,7 +791,7 @@ int create_graphichs_pipeline() {
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates = dynamicStates;
 
-    VkVertexInputBindingDescription bindingDescription = getBindingDescription(test_object.vertices, 3);
+    VkVertexInputBindingDescription bindingDescription = getBindingDescription(vikingObject.vertices, 3);
     uint32_t AttributeDescriptionCount = 3;
     VkVertexInputAttributeDescription AttributeDescriptions[AttributeDescriptionCount];
     getAttributeDescriptions(AttributeDescriptions, &AttributeDescriptionCount);
@@ -993,14 +994,23 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     scissor.offset = (VkOffset2D){0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(_commandBuffer, 0, 1, &scissor);
-    VkBuffer vertexBuffers[] = {
-        test_object.vertexBuffer}; // TODO should be object count or something like that with a loop that adds each object vertexBuffer
+    VkBuffer vertexBuffers[] = {vikingObject.vertexBuffer};
+    // VIKING DRAW
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(_commandBuffer, test_object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(_commandBuffer, vikingObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
-    vkCmdDrawIndexed(_commandBuffer, test_object.indicesCount, 4, 0, 0, 0);
+    vkCmdDrawIndexed(_commandBuffer, vikingObject.indicesCount, 1, 0, 0, 0);
+
+    vertexBuffers[0] = donutObject.vertexBuffer;
+    // DONUT DRAW
+    vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(_commandBuffer, donutObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
+    vkCmdDrawIndexed(_commandBuffer, donutObject.indicesCount, 1, 0, 0, 0);
+
     vkCmdEndRenderPass(_commandBuffer);
     if (vkEndCommandBuffer(_commandBuffer) != VK_SUCCESS) {
         printf("vkEndCommandBuffer failed, c:%d\n", __LINE__);
@@ -1171,8 +1181,8 @@ void transitions_image_layout(VkImage image, VkFormat format, VkImageLayout oldL
     end_single_time_commands(transitionCommandBuffer);
 }
 // TODO change this to take an object instead
-int create_index_buffer() {
-    VkDeviceSize bufferSize = test_object.indicesCount * sizeof(uint32_t);
+int create_index_buffer(Object_3d_t *object) {
+    VkDeviceSize bufferSize = object->indicesCount * sizeof(uint32_t);
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1180,11 +1190,11 @@ int create_index_buffer() {
 
     void *data;
     vkMapMemory(mydevice.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, test_object.indices, bufferSize);
+    memcpy(data, object->indices, bufferSize);
     vkUnmapMemory(mydevice.device, stagingBufferMemory);
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  &test_object.indexBuffer, &test_object.indexBufferMemory);
-    copy_buffer(stagingBuffer, test_object.indexBuffer, bufferSize);
+                  &object->indexBuffer, &object->indexBufferMemory);
+    copy_buffer(stagingBuffer, object->indexBuffer, bufferSize);
     vkDestroyBuffer(mydevice.device, stagingBuffer, NULL);
     vkFreeMemory(mydevice.device, stagingBufferMemory, NULL);
 
@@ -1195,7 +1205,7 @@ int create_index_buffer() {
  *
  */
 int create_vertex_buffer(Object_3d_t *object) {
-    VkDeviceSize bufferSize = sizeof(Vertex) * test_object.verticesCount;
+    VkDeviceSize bufferSize = sizeof(Vertex) * object->verticesCount;
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     create_buffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1559,7 +1569,7 @@ int upload_model(Object_3d_t *object) {
     create_vertex_buffer(object);
     // create_image_view();
     create_texture_sampler(&object->textures[0]);
-    create_index_buffer();
+    create_index_buffer(object);
     create_uniform_buffers(); // TODO make this a specific one for transform
     return 0;
 }
@@ -1595,18 +1605,26 @@ int init_vulkan() {
     create_depth_resources();
     create_frame_buffers();
     create_command_pool(&mydevice);
-    load_model(ModelPath, &test_object);
-    test_object.textures = malloc(sizeof(texture_t));
-    load_texture_image(TexturePath, &test_object.textures[0]);
-    test_object.textureCount += 1;
-    upload_model(&test_object);
-    // create_vertex_buffer();
-    test_object.textures[0].textureImageView = create_image_view(test_object.textures[0].textureImage, VK_FORMAT_R8G8B8A8_SRGB,
-                                                                 test_object.textures[0].textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
-    create_index_buffer();
+    load_model(VikingPath, &vikingObject);
+    vikingObject.textures = malloc(sizeof(texture_t));
+    load_texture_image(VikingTexturePath, &vikingObject.textures[0]);
+    vikingObject.textureCount += 1;
+    vikingObject.textures[0].textureImageView = create_image_view(vikingObject.textures[0].textureImage, VK_FORMAT_R8G8B8A8_SRGB,
+                                                                  vikingObject.textures[0].textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    upload_model(&vikingObject);
+
+    load_model(DonutPath, &donutObject);
+    donutObject.textures = malloc(sizeof(texture_t));
+    load_texture_image(DonutTexPath, &donutObject.textures[0]);
+    donutObject.textureCount = 0;
+    donutObject.textures[0].textureImageView = create_image_view(donutObject.textures[0].textureImage, VK_FORMAT_R8G8B8A8_SRGB,
+                                                                 donutObject.textures[0].textureMipLevels, VK_IMAGE_ASPECT_COLOR_BIT);
+    upload_model(&donutObject);
+
     create_uniform_buffers();
     create_descriptor_pool();
-    create_descriptor_sets(&test_object.textures[0]);
+    create_descriptor_sets(&vikingObject.textures[0]);
     create_command_buffer();
     create_sync_objects();
 
@@ -1642,10 +1660,10 @@ int deinit_vulkan() {
     vkDestroyCommandPool(mydevice.device, commandPool, NULL);
 
     cleanup_swap_chain();
-    vkDestroySampler(mydevice.device, test_object.textures[0].textureSampler, NULL);
-    vkDestroyImageView(mydevice.device, test_object.textures[0].textureImageView, NULL);
-    vkDestroyImage(mydevice.device, test_object.textures[0].textureImage, NULL);
-    vkFreeMemory(mydevice.device, test_object.textures[0].textureImageMemory, NULL);
+    vkDestroySampler(mydevice.device, vikingObject.textures[0].textureSampler, NULL);
+    vkDestroyImageView(mydevice.device, vikingObject.textures[0].textureImageView, NULL);
+    vkDestroyImage(mydevice.device, vikingObject.textures[0].textureImage, NULL);
+    vkFreeMemory(mydevice.device, vikingObject.textures[0].textureImageMemory, NULL);
     vkDestroyDescriptorPool(mydevice.device, descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(mydevice.device, descriptorSetLayout, NULL);
 
@@ -1653,10 +1671,10 @@ int deinit_vulkan() {
         vkDestroyBuffer(mydevice.device, uniformBuffers[i], NULL);
         vkFreeMemory(mydevice.device, uniformBuffersMemory[i], NULL);
     }
-    vkDestroyBuffer(mydevice.device, test_object.indexBuffer, NULL);
-    vkFreeMemory(mydevice.device, test_object.indexBufferMemory, NULL);
-    vkDestroyBuffer(mydevice.device, test_object.vertexBuffer, NULL);
-    vkFreeMemory(mydevice.device, test_object.vertexBufferMemory, NULL);
+    vkDestroyBuffer(mydevice.device, vikingObject.indexBuffer, NULL);
+    vkFreeMemory(mydevice.device, vikingObject.indexBufferMemory, NULL);
+    vkDestroyBuffer(mydevice.device, vikingObject.vertexBuffer, NULL);
+    vkFreeMemory(mydevice.device, vikingObject.vertexBufferMemory, NULL);
     vkDestroyPipeline(mydevice.device, graphicsPipeline, NULL);
     vkDestroyPipelineLayout(mydevice.device, pipelineLayout, NULL);
     vkDestroyRenderPass(mydevice.device, renderpass, NULL);
