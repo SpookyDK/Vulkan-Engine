@@ -53,8 +53,8 @@ const bool enableValidationLayers = true;
 const char *VikingPath = "./models/viking_room_obj";
 const char *VikingTexturePath = "./textures/viking_room.png";
 
-const char *DonutPath = "./models/viking_room_obj";
-const char *DonutTexPath = "./textures/viking_room.png";
+const char *DonutPath = "./models/donut.obj";
+const char *DonutTexPath = "./textures/donut.png";
 // VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 // VkDevice device = VK_NULL_HANDLE;
 // VkQueue graphicsQueue = VK_NULL_HANDLE;
@@ -139,29 +139,7 @@ VkDeviceMemory depthImageMemory;
 VkImageView depthImageView;
 
 VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-// Vertex vertices[] = {{.pos = {{-0.5f, -0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 0.0f}}},
-//                      {.pos = {{0.5f, -0.5f, 0.0f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
-//                      {.pos = {{0.5f, 0.5f, 0.0f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
-//                      {.pos = {{-0.5f, 0.5f, 0.0f}}, .color = {{1.0f, 0.0f, 0.0f}}, .texCoord = {{0.0f, 1.0f}}},
-//
-//                      {.pos = {{-0.5f, -0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 0.0f}}},
-//                      {.pos = {{0.5f, -0.5f, -0.5f}}, .color = {{0.0f, 1.0f, 0.0f}}, .texCoord = {{1.0f, 0.0f}}},
-//                      {.pos = {{0.5f, 0.5f, -0.5f}}, .color = {{0.0f, 0.0f, 1.0f}}, .texCoord = {{1.0f, 1.0f}}},
-//                      {.pos = {{-0.5f, 0.5f, -0.5f}}, .color = {{1.0f, 1.0f, 1.0f}}, .texCoord = {{0.0f, 1.0f}}}};
-// const uint16_t indices[] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
-// Vertex *vertices;
-// uint32_t verticesCount;
-// uint32_t *indices;
-// uint32_t indicesCount;
-
-VkVertexInputBindingDescription getBindingDescription(Vertex *_vertices,
-                                                      uint32_t _verticesCount) { // TODO should delete these params / make it premade struct
-    VkVertexInputBindingDescription bindingDescription = {};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    return bindingDescription;
-}
+// BUG: THIS never uses the count
 int getAttributeDescriptions(VkVertexInputAttributeDescription *pAttributeDescriptions, uint32_t *pAttributeDescriptionCount) {
     if (*pAttributeDescriptionCount == 0 || pAttributeDescriptions == NULL) {
         return 1;
@@ -197,17 +175,18 @@ void create_descriptor_set_layout() {
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = NULL;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutBinding.pImmutableSamplers = NULL;
+
     VkDescriptorSetLayoutBinding bindings[] = {uboLayoutBinding, samplerLayoutBinding};
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
-    // layoutInfo.bindingCount = 2;
     layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(mydevice.device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
@@ -381,7 +360,7 @@ void create_descriptor_sets(texture_t *texture) {
         imageInfo.sampler = texture->textureSampler;
 
         // Here we make some descriptorWrites to descripe how we will make descriptors
-        VkWriteDescriptorSet descriptorWrites[2] = {};
+        VkWriteDescriptorSet descriptorWrites[3] = {};
         // One for the buffer
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
@@ -403,6 +382,17 @@ void create_descriptor_sets(texture_t *texture) {
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pBufferInfo = NULL;
         descriptorWrites[1].pImageInfo = &imageInfo;
+
+        VkDescriptorImageInfo imageInfoDonut = {};
+        imageInfoDonut.imageView = donutObject.textures[0].textureImageView;
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = descriptorSets[i];
+        descriptorWrites[2].dstBinding = 2;
+        descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pBufferInfo = NULL;
+        descriptorWrites[2].pImageInfo = &imageInfo;
         // We update the descriptor sets on the given device.  think this overwrites all previous ones
         vkUpdateDescriptorSets(mydevice.device, 2, descriptorWrites, 0, NULL);
     }
@@ -791,7 +781,11 @@ int create_graphichs_pipeline() {
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates = dynamicStates;
 
-    VkVertexInputBindingDescription bindingDescription = getBindingDescription(vikingObject.vertices, 3);
+    VkVertexInputBindingDescription bindingDescription = {};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
     uint32_t AttributeDescriptionCount = 3;
     VkVertexInputAttributeDescription AttributeDescriptions[AttributeDescriptionCount];
     getAttributeDescriptions(AttributeDescriptions, &AttributeDescriptionCount);
@@ -1000,7 +994,8 @@ void record_command_buffer(VkCommandBuffer _commandBuffer, uint32_t imageIndex) 
     vkCmdBindVertexBuffers(_commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(_commandBuffer, vikingObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-    vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, NULL);
+    vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0,
+                            NULL); // TODO: This need to be made into a texture array and then an index i passed through with each draw.
     vkCmdDrawIndexed(_commandBuffer, vikingObject.indicesCount, 1, 0, 0, 0);
 
     vertexBuffers[0] = donutObject.vertexBuffer;
